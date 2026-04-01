@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="after.hours — private film pool for friends" />
+  <title>after.hours</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="entry-screen" class="screen active">
+      <p class="marquee-top">private screening</p>
+      <div class="logo-wrap" id="logo-tap">
+        <h1 class="logo">after<span>.</span>hours</h1>
+      </div>
+      <div class="admin-tap-progress" id="tap-dots" aria-hidden="true">
+        <div class="tap-dot" id="d0"></div>
+        <div class="tap-dot" id="d1"></div>
+        <div class="tap-dot" id="d2"></div>
+        <div class="tap-dot" id="d3"></div>
+        <div class="tap-dot" id="d4"></div>
+      </div>
+      <p class="tagline">the film pool</p>
+      <div class="door-wrap">
+        <svg width="130" height="175" viewBox="0 0 130 175" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="8" y="8" width="114" height="159" rx="5" fill="#111118" stroke="#2a2a35" stroke-width="1" />
+          <rect x="17" y="17" width="96" height="141" rx="3" fill="#0d0d14" stroke="#1e1e28" stroke-width=".5" />
+          <rect x="25" y="27" width="34" height="55" rx="2" fill="#111118" stroke="#2a2a35" stroke-width=".5" />
+          <rect x="71" y="27" width="34" height="55" rx="2" fill="#111118" stroke="#2a2a35" stroke-width=".5" />
+          <rect x="25" y="92" width="80" height="54" rx="2" fill="#111118" stroke="#2a2a35" stroke-width=".5" />
+          <circle cx="94" cy="88" r="5" fill="#c8a96e" />
+          <circle cx="94" cy="88" r="2.5" fill="#0a0a0f" />
+          <line x1="65" y1="17" x2="65" y2="158" stroke="#2a2a35" stroke-width=".5" />
+        </svg>
+      </div>
+      <div class="code-wrap">
+        <p class="code-label">join code</p>
+        <input id="code-input" type="text" placeholder="your code" maxlength="12" autocomplete="off" autocapitalize="characters" />
+        <p class="err" id="err-msg"></p>
+        <button type="button" id="enter-btn">enter</button>
+      </div>
+    </div>
+
+    <div id="video-modal">
+      <p class="modal-label">welcome to after hours</p>
+      <div class="video-frame-wrap">
+        <div class="no-video-ph" id="no-video-ph">
+          <div class="play-icon">
+            <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+              <polygon points="6,3 17,10 6,17" fill="#c8a96e" />
+            </svg>
+          </div>
+          <p class="no-video-text">welcome video coming soon</p>
+        </div>
+        <iframe id="yt-frame" style="display: none" allow="autoplay; encrypted-media" allowfullscreen title="Welcome video"></iframe>
+      </div>
+      <button type="button" id="skip-btn">skip &rarr;</button>
+    </div>
+
+    <div id="main-screen" class="screen">
+      <div class="top-bar">
+        <span class="top-logo">after<span>.</span>hours</span>
+        <span class="room-badge" id="room-badge" title=""></span>
+      </div>
+      <p class="screening-title" id="room-title-line" hidden></p>
+      <div class="countdown-block">
+        <p class="cd-label">next screening</p>
+        <div id="cd-display"></div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-num" id="film-count-stat">0</div>
+          <div class="stat-label">films in pool</div>
+        </div>
+      </div>
+      <div class="add-section" id="add-section">
+        <p class="sec-label">add your pick</p>
+        <input id="name-input" type="text" placeholder="your name" maxlength="24" />
+        <div class="search-row">
+          <input id="film-search" type="text" placeholder="search a film..." />
+          <button type="button" id="search-btn">search</button>
+        </div>
+        <div class="results-list" id="results-list"></div>
+      </div>
+      <div class="my-pick" id="my-pick-section" style="display: none">
+        <p class="sec-label">your pick</p>
+        <div class="my-pick-inner" id="my-pick-inner"></div>
+      </div>
+    </div>
+
+    <div id="host-screen" class="screen">
+      <div class="admin-bar">
+        <span class="admin-title">create the room</span>
+        <button type="button" id="back-btn">back</button>
+      </div>
+      <div class="admin-section">
+        <p class="sec-label">room</p>
+        <div class="admin-row">
+          <label for="room-name-input">name</label>
+          <input type="text" id="room-name-input" placeholder="e.g. March movie night" maxlength="80" />
+        </div>
+        <div class="admin-row">
+          <label for="event-dt">date &amp; time</label>
+          <input type="datetime-local" id="event-dt" />
+        </div>
+        <div class="admin-row">
+          <label for="yt-url-input">welcome video (youtube url, optional)</label>
+          <input type="text" id="yt-url-input" placeholder="https://youtube.com/watch?v=..." />
+        </div>
+        <button type="button" class="admin-save" id="save-settings">save room</button>
+        <p class="host-hint">first save creates the join code and guest link. everything lives in each person&rsquo;s browser (no cloud sync yet).</p>
+        <div id="host-join-panel" class="host-join-panel" hidden>
+          <p class="sec-label">share this</p>
+          <div class="join-code-big" id="join-code-display"></div>
+          <button type="button" class="btn-secondary" id="copy-code-btn">copy code</button>
+          <div class="admin-row" style="margin-top: 1rem">
+            <label for="share-url-input">link for guests</label>
+            <input type="text" id="share-url-input" readonly />
+          </div>
+          <button type="button" class="btn-secondary" id="copy-share-btn">copy link</button>
+        </div>
+        <p class="host-new-wrap"><button type="button" class="link-btn" id="start-new-room">start a new screening</button></p>
+      </div>
+      <div class="admin-section">
+        <p class="sec-label">the pool (<span id="admin-pool-count">0</span>) — host only on this device</p>
+        <div class="pool-full" id="admin-pool-list"></div>
+        <div class="admin-draw-row">
+          <button type="button" class="draw-btn" id="admin-draw-btn" disabled>draw a film</button>
+          <button type="button" class="clear-btn" id="admin-clear-btn">clear pool</button>
+        </div>
+        <div id="winner-display"></div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
