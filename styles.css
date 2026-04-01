@@ -346,6 +346,139 @@ body {
   color: #888;
 }
 
+.pick-caution {
+  font-size: 11px;
+  color: #666;
+  line-height: 1.45;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.pick-caution strong {
+  color: #888;
+  font-weight: 500;
+}
+
+.repick-banner {
+  color: #c8a96e;
+}
+
+.result-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.result-later {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.result-later:hover {
+  color: #c8a96e;
+}
+
+.backlog-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 0.5px solid #1e1e28;
+}
+
+.backlog-list {
+  list-style: none;
+  font-size: 12px;
+  color: #888;
+  margin-top: 0.5rem;
+}
+
+.backlog-list li {
+  padding: 0.35rem 0;
+  border-bottom: 0.5px solid #1a1a22;
+}
+
+.pick-status {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 0.35rem;
+}
+
+.my-pick-actions {
+  margin-top: 0.75rem;
+}
+
+.btn-text {
+  background: transparent;
+  border: 0.5px solid #2a2a35;
+  color: #888;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.btn-text:hover {
+  border-color: #c8a96e;
+  color: #c8a96e;
+}
+
+.dev-panel {
+  width: 100%;
+  background: #14141c;
+  border: 0.5px dashed #3a3a48;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.dev-badge {
+  font-size: 10px;
+  color: #555;
+  letter-spacing: 0.06em;
+}
+
+.dev-ladder-wrap {
+  margin-top: 1rem;
+}
+
+.dev-ladder {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin: 0.75rem 0;
+  color: #888;
+  font-size: 13px;
+}
+
+.dev-ladder li {
+  padding: 0.35rem 0;
+}
+
+.dev-ladder li.is-active {
+  color: #c8a96e;
+  font-weight: 500;
+}
+
+.dev-ladder li.is-skipped {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.dev-active-line {
+  font-size: 13px;
+  color: #f0ead6;
+  margin: 0.5rem 0;
+  line-height: 1.4;
+}
+
+
 .countdown-block {
   background: #111118;
   border: 0.5px solid #1e1e28;
@@ -557,6 +690,19 @@ body {
   font-size: 12px;
   color: #c8a96e;
   flex-shrink: 0;
+}
+
+.result-add-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: #c8a96e;
+  cursor: pointer;
+  padding: 0;
+}
+
+.result-add-btn:hover {
+  text-decoration: underline;
 }
 
 .searching-msg {

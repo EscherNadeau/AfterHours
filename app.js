@@ -1,12 +1,25 @@
 /**
- * after.hours — film pool (static; data in localStorage per join code on this device)
- * Production: run `npm run build` with TMDB_API_KEY set (Netlify env).
+ * after.hours — film pool (static; data in localStorage per join code on this device).
+ * Real backend later: sync room, picks, and “one pick per person” server-side.
+ * Production: `npm run build` with TMDB_API_KEY (Netlify env).
  */
 const TMDB_KEY = "";
 
 const LEGACY_KEY = "ah_state";
 const LAST_HOST_KEY = "ah_last_host_code";
 const JOIN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const BACKLOG_MAX = 5;
+
+const DEV_FILMS = [
+  { id: -101, title: "After Hours", release_date: "1985-09-13", poster_path: null },
+  { id: -102, title: "Blade Runner", release_date: "1982-06-25", poster_path: null },
+  { id: -103, title: "Saint Maud", release_date: "2020-10-09", poster_path: null },
+  { id: -104, title: "The Nice Guys", release_date: "2016-05-20", poster_path: null },
+  { id: -105, title: "Perfect Blue", release_date: "1998-02-28", poster_path: null },
+  { id: -106, title: "Columbus", release_date: "2017-08-04", poster_path: null },
+  { id: -107, title: "Punch-Drunk Love", release_date: "2002-11-01", poster_path: null },
+  { id: -108, title: "Toni Erdmann", release_date: "2016-07-14", poster_path: null },
+];
 
 let currentRoomSlug = null;
 let state = freshState();
@@ -20,7 +33,20 @@ function freshState() {
     myPick: null,
     roomName: "",
     joinCode: "",
+    myBacklog: [],
+    awaitingRepick: false,
+    pickFinal: false,
+    devPresenterIndex: 0,
+    devNoShowSlots: [],
   };
+}
+
+function devModeOn() {
+  try {
+    return new URLSearchParams(location.search).get("dev") === "1";
+  } catch {
+    return false;
+  }
 }
 
 const $ = (id) => document.getElementById(id);
@@ -140,6 +166,11 @@ function loadRoomIntoState(code) {
     state = { ...base, ...o };
     if (!state.roomName && o.screeningName) state.roomName = o.screeningName;
     if (!state.joinCode) state.joinCode = normalizeJoinCode(slug);
+    if (!Array.isArray(state.myBacklog)) state.myBacklog = [];
+    if (typeof state.awaitingRepick !== "boolean") state.awaitingRepick = false;
+    if (typeof state.pickFinal !== "boolean") state.pickFinal = false;
+    if (typeof state.devPresenterIndex !== "number") state.devPresenterIndex = 0;
+    if (!Array.isArray(state.devNoShowSlots)) state.devNoShowSlots = [];
     ensurePickUids();
   } catch {
     state = { ...base };
@@ -216,25 +247,168 @@ function renderRoomTitle() {
   el.textContent = name;
 }
 
+function renderBacklog() {
+  const wrap = $("backlog-section");
+  const ul = $("backlog-list");
+  if (!wrap || !ul) return;
+  if (!state.myBacklog.length) {
+    wrap.hidden = true;
+    ul.innerHTML = "";
+    return;
+  }
+  wrap.hidden = false;
+  ul.innerHTML = state.myBacklog
+    .map(
+      (b) =>
+        `<li>${escapeHtml(b.title)}${b.year ? " (" + escapeHtml(b.year) + ")" : ""}</li>`
+    )
+    .join("");
+}
+
+function renderPickStatusAndActions() {
+  const status = $("pick-status-line");
+  const actions = $("my-pick-actions");
+  if (!status || !actions) return;
+  if (!state.myPick) {
+    status.hidden = true;
+    status.textContent = "";
+    actions.innerHTML = "";
+    return;
+  }
+  if (state.pickFinal) {
+    status.hidden = false;
+    status.textContent = "Locked in for this week — ask the host if something went wrong.";
+    actions.innerHTML = "";
+    return;
+  }
+  status.hidden = false;
+  status.textContent = "You can still change this once if you have a better idea.";
+  actions.innerHTML =
+    '<button type="button" class="btn-text" id="change-pick-btn">change my pick (one time)</button>';
+  const btn = $("change-pick-btn");
+  if (btn) btn.addEventListener("click", beginChangePick);
+}
+
 function renderMainStats() {
   $("film-count-stat").textContent = state.pool.length;
   renderRoomTitle();
+  const devP = $("dev-panel");
+  if (devP) devP.hidden = !devModeOn();
+  renderDevLadder();
+  renderBacklog();
   const rb = $("room-badge");
   if (rb && state.joinCode) {
     rb.textContent = "code · " + state.joinCode;
     rb.title = "Join code: " + state.joinCode;
   }
-  if (state.myPick) {
+  const repickBanner = $("repick-banner");
+  if (repickBanner) repickBanner.hidden = !(state.awaitingRepick && !state.myPick);
+
+  if (state.awaitingRepick && !state.myPick) {
+    $("add-section").style.display = "flex";
+    $("my-pick-section").style.display = "none";
+  } else if (state.myPick) {
     $("add-section").style.display = "none";
     $("my-pick-section").style.display = "flex";
     const f = state.myPick;
     const p = f.poster ? `https://image.tmdb.org/t/p/w92${f.poster}` : null;
     $("my-pick-inner").innerHTML = `${p ? `<img class="my-poster" src="${p}" alt="">` : '<div class="my-poster-ph"></div>'}
       <div><div class="my-title">${escapeHtml(f.title)}</div><div class="my-year">${escapeHtml(f.year)}</div><div class="my-by">submitted by ${escapeHtml(f.addedBy)}</div></div>`;
+    renderPickStatusAndActions();
   } else {
     $("add-section").style.display = "flex";
     $("my-pick-section").style.display = "none";
+    renderPickStatusAndActions();
   }
+}
+
+function renderDevLadder() {
+  const wrap = $("dev-ladder-wrap");
+  const list = $("dev-ladder");
+  const line = $("dev-active-line");
+  const slotSpan = $("dev-active-slot");
+  if (!wrap || !list || !line || !slotSpan) return;
+  if (!devModeOn() || state.pool.length < 1) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  const top = state.pool.slice(0, 3);
+  let html = "";
+  for (let i = 0; i < top.length; i++) {
+    const p = top[i];
+    const skipped = state.devNoShowSlots.includes(i);
+    const active = i === state.devPresenterIndex && !skipped;
+    let cls = "";
+    if (skipped) cls = " is-skipped";
+    else if (active) cls = " is-active";
+    html += `<li class="${cls.trim()}">${escapeHtml(p.addedBy)} — ${escapeHtml(p.title)} (${escapeHtml(p.year)})</li>`;
+  }
+  list.innerHTML = html;
+  const cur = top[state.devPresenterIndex];
+  const humanSlot = state.devPresenterIndex + 1;
+  slotSpan.textContent = String(humanSlot);
+  if (cur && !state.devNoShowSlots.includes(state.devPresenterIndex)) {
+    line.textContent = `Showing line-up #${humanSlot}: ${cur.title} — submitted by ${cur.addedBy}`;
+  } else {
+    line.textContent = "No more fallbacks in the top three.";
+  }
+}
+
+function shuffleInPlace(arr) {
+  const a = arr;
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function seedDevRandomPicks() {
+  if (!devModeOn()) return;
+  const deck = DEV_FILMS.slice();
+  shuffleInPlace(deck);
+  const guestNames = ["Dev guest 1", "Dev guest 2", "Dev guest 3"];
+  for (let i = 0; i < 3 && deck.length; i++) {
+    const film = deck[i];
+    const uid =
+      "p-dev-" +
+      (typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2) + Date.now().toString(36));
+    const pick = {
+      uid,
+      id: film.id,
+      title: film.title,
+      year: film.release_date ? film.release_date.slice(0, 4) : "",
+      poster: film.poster_path,
+      addedBy: guestNames[i],
+    };
+    state.pool.push(pick);
+  }
+  state.devPresenterIndex = 0;
+  state.devNoShowSlots = [];
+  save();
+  renderMainStats();
+  toast("dev: added 3 random picks");
+}
+
+function devAdvanceFallback() {
+  if (!devModeOn()) return;
+  const topLen = Math.min(3, state.pool.length);
+  if (topLen < 1) return;
+  if (!state.devNoShowSlots.includes(state.devPresenterIndex)) {
+    state.devNoShowSlots.push(state.devPresenterIndex);
+  }
+  let next = state.devPresenterIndex + 1;
+  while (next < topLen && state.devNoShowSlots.includes(next)) next++;
+  if (next < topLen) {
+    state.devPresenterIndex = next;
+  } else {
+    toast("no further pick in top 3");
+  }
+  save();
+  renderDevLadder();
 }
 
 function escapeHtml(s) {
@@ -320,6 +494,7 @@ function shareJoinUrl(code) {
   try {
     const u = new URL(window.location.href);
     u.searchParams.set("code", normalizeJoinCode(code));
+    if (devModeOn()) u.searchParams.set("dev", "1");
     return u.toString();
   } catch {
     return "";
@@ -460,13 +635,83 @@ function renderResults(films) {
     div.className = "result-item";
     div.innerHTML = `${p ? `<img class="result-poster" src="${p}" alt="">` : '<div class="result-poster-ph"></div>'}
       <div style="flex:1;min-width:0;"><div class="result-title">${escapeHtml(f.title)}</div><div class="result-year">${escapeHtml(year)}</div></div>
-      <span class="result-add">+ add</span>`;
-    div.addEventListener("click", () => addFilm(f));
+      <div class="result-actions">
+        <button type="button" class="result-add-btn">+ add</button>
+        <button type="button" class="result-later">next week</button>
+      </div>`;
+    div.querySelector(".result-add-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      addFilm(f);
+    });
+    div.querySelector(".result-later").addEventListener("click", (e) => {
+      e.stopPropagation();
+      saveForLater(f);
+    });
     list.appendChild(div);
   });
 }
 
+function saveForLater(f) {
+  if (state.myBacklog.length >= BACKLOG_MAX) {
+    toast(`backlog full (${BACKLOG_MAX}) — remove ideas next week on paper`);
+    return;
+  }
+  const id = f.id;
+  if (state.myBacklog.some((x) => x.id === id)) {
+    toast("already saved for later");
+    return;
+  }
+  state.myBacklog.push({
+    id,
+    title: f.title,
+    year: f.release_date ? f.release_date.slice(0, 4) : "",
+    poster: f.poster_path,
+  });
+  save();
+  renderBacklog();
+  toast("saved for next week (this device only)");
+}
+
+function beginChangePick() {
+  if (!state.myPick || state.pickFinal || state.awaitingRepick) return;
+  const uid = state.myPick.uid;
+  const idx = state.pool.findIndex((p) => p.uid === uid);
+  if (idx >= 0) state.pool.splice(idx, 1);
+  if (
+    state.winner &&
+    state.winner.uid &&
+    state.winner.uid === uid
+  ) {
+    state.winner = null;
+  }
+  state.myPick = null;
+  state.awaitingRepick = true;
+  save();
+  $("results-list").innerHTML = "";
+  renderMainStats();
+  toast("pick a replacement");
+}
+
 function addFilm(f) {
+  if (state.pickFinal && state.myPick) {
+    toast("pick is final for this week");
+    return;
+  }
+  if (state.myPick && !state.awaitingRepick) {
+    toast("use change my pick first");
+    return;
+  }
+  const firstCommit = !state.awaitingRepick && !state.myPick;
+  if (firstCommit) {
+    if (
+      !confirm(
+        "Lock in this film for tonight? You get one change after this; then it’s final."
+      )
+    ) {
+      return;
+    }
+  }
+
   const name = $("name-input").value.trim() || "anon";
   const uid =
     "p-" +
@@ -483,6 +728,10 @@ function addFilm(f) {
   };
   state.pool.push(pick);
   state.myPick = pick;
+  if (state.awaitingRepick) {
+    state.awaitingRepick = false;
+    state.pickFinal = true;
+  }
   save();
   $("results-list").innerHTML = "";
   $("film-search").value = "";
@@ -603,11 +852,20 @@ function bindEvents() {
     state.pool = [];
     state.winner = null;
     state.myPick = null;
+    state.awaitingRepick = false;
+    state.pickFinal = false;
+    state.devPresenterIndex = 0;
+    state.devNoShowSlots = [];
     save();
     renderAdminPool();
     renderWinner();
     toast("pool cleared");
   });
+
+  const devSeed = $("dev-seed-btn");
+  if (devSeed) devSeed.addEventListener("click", seedDevRandomPicks);
+  const devNext = $("dev-next-fallback-btn");
+  if (devNext) devNext.addEventListener("click", devAdvanceFallback);
 }
 
 bindEvents();

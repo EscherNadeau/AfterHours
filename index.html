@@ -76,16 +76,36 @@
       </div>
       <div class="add-section" id="add-section">
         <p class="sec-label">add your pick</p>
+        <p class="pick-caution">one official pick per night on this device — you get one change if you rethink. use <strong>next week</strong> on a result to stash an idea without locking in.</p>
+        <p class="pick-caution repick-banner" id="repick-banner" hidden>choose your replacement — this counts as your one change; next pick is final.</p>
         <input id="name-input" type="text" placeholder="your name" maxlength="24" />
         <div class="search-row">
           <input id="film-search" type="text" placeholder="search a film..." />
           <button type="button" id="search-btn">search</button>
         </div>
         <div class="results-list" id="results-list"></div>
+        <div id="backlog-section" class="backlog-section" hidden>
+          <p class="sec-label">saved for later</p>
+          <ul class="backlog-list" id="backlog-list"></ul>
+        </div>
+      </div>
+      <div id="dev-panel" class="dev-panel" hidden>
+        <p class="sec-label">dev mode <span class="dev-badge">?dev=1</span></p>
+        <p class="host-hint">fills the pool with three random fake submissions to test the presenter order.</p>
+        <button type="button" class="btn-secondary" id="dev-seed-btn">add 3 random picks</button>
+        <div id="dev-ladder-wrap" class="dev-ladder-wrap" hidden>
+          <p class="sec-label">presenter order (first 3 in pool)</p>
+          <p class="host-hint">if #1 doesn&rsquo;t show, move to the next line.</p>
+          <ol class="dev-ladder" id="dev-ladder"></ol>
+          <p class="dev-active-line" id="dev-active-line"></p>
+          <button type="button" class="btn-secondary" id="dev-next-fallback-btn">#<span id="dev-active-slot">1</span> no-show &rarr; use next</button>
+        </div>
       </div>
       <div class="my-pick" id="my-pick-section" style="display: none">
         <p class="sec-label">your pick</p>
+        <p class="pick-status" id="pick-status-line" hidden></p>
         <div class="my-pick-inner" id="my-pick-inner"></div>
+        <div class="my-pick-actions" id="my-pick-actions"></div>
       </div>
     </div>
 
