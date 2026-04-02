@@ -492,6 +492,7 @@ function updateAddSectionForPickWindow() {
   const searchHintCloud = $("search-hint-cloud");
   const addTitle = $("add-section-title");
   const pickCloud = $("pick-cloud-hint");
+  const filmPanel = $("film-search-panel");
 
   if (!waitEl || !lockBlock) return;
 
@@ -501,6 +502,7 @@ function updateAddSectionForPickWindow() {
     if (searchHintCloud) searchHintCloud.hidden = true;
     if (addTitle) addTitle.textContent = "add your pick";
     if (pickCloud) pickCloud.hidden = true;
+    if (filmPanel) filmPanel.style.display = "";
     return;
   }
 
@@ -511,6 +513,7 @@ function updateAddSectionForPickWindow() {
     if (searchHintCloud) searchHintCloud.hidden = true;
     if (addTitle) addTitle.textContent = "add your pick";
     if (pickCloud) pickCloud.hidden = false;
+    if (filmPanel) filmPanel.style.display = "";
     return;
   }
 
@@ -524,24 +527,27 @@ function updateAddSectionForPickWindow() {
   if (st === "before_open") {
     const t = new Date(state.roomPublic.submissions_open_at).toLocaleString(undefined, op);
     waitEl.hidden = false;
-    waitEl.textContent = `You’re in the right place — countdown and pick window are above. Names and official picks unlock at ${t}. Until then, use search only to stash ideas with “next week.”`;
+    waitEl.textContent = `You’re in early — that’s fine. The schedule above shows when picks open (${t}) and when they lock. There’s nothing to fill in here until opens; come back then to lock your film for this night.`;
     lockBlock.style.display = "none";
-    if (searchHintCloud) searchHintCloud.hidden = false;
-    if (addTitle) addTitle.textContent = "browse films";
+    if (searchHintCloud) searchHintCloud.hidden = true;
+    if (addTitle) addTitle.textContent = "before picks open";
     if (pickCloud) pickCloud.hidden = true;
+    if (filmPanel) filmPanel.style.display = "none";
   } else if (st === "closed") {
     waitEl.hidden = false;
-    waitEl.textContent = `Pick window closed for this night. You can still search and save titles for another week with “next week.”`;
+    waitEl.textContent = `This night’s pick window is closed. Below you can still search and tap “next week” to park ideas for a later screening — not tonight.`;
     lockBlock.style.display = "none";
     if (searchHintCloud) searchHintCloud.hidden = false;
-    if (addTitle) addTitle.textContent = "browse films";
+    if (addTitle) addTitle.textContent = "ideas for later";
     if (pickCloud) pickCloud.hidden = true;
+    if (filmPanel) filmPanel.style.display = "";
   } else {
     waitEl.hidden = true;
     lockBlock.style.display = "";
     if (searchHintCloud) searchHintCloud.hidden = true;
     if (addTitle) addTitle.textContent = "add your pick";
     if (pickCloud) pickCloud.hidden = false;
+    if (filmPanel) filmPanel.style.display = "";
   }
 }
 

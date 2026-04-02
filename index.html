@@ -138,12 +138,16 @@
           <p class="pick-caution repick-banner" id="repick-banner" hidden>Choose your replacement &mdash; this counts as your one change; next pick is final.</p>
           <input id="name-input" type="text" placeholder="your name (shown on your pick)" maxlength="24" />
         </div>
-        <p class="pick-caution cloud-only" id="search-hint-cloud" hidden>Search still works below to stash films <strong>for another night</strong>.</p>
-        <div class="search-row">
-          <input id="film-search" type="text" placeholder="search a film..." />
-          <button type="button" id="search-btn">search</button>
+        <p class="pick-caution cloud-only" id="search-hint-cloud" hidden>
+          Hunt a title for a <strong>future</strong> week — not tonight’s locked pick.
+        </p>
+        <div id="film-search-panel">
+          <div class="search-row">
+            <input id="film-search" type="text" placeholder="search a film..." />
+            <button type="button" id="search-btn">search</button>
+          </div>
+          <div class="results-list" id="results-list"></div>
         </div>
-        <div class="results-list" id="results-list"></div>
       </div>
       <div id="dev-panel" class="dev-panel local-only" hidden>
         <p class="sec-label">dev mode <span class="dev-badge">?dev=1</span></p>
@@ -174,7 +178,9 @@
         <p class="sec-label cloud-only">new screening (cloud)</p>
         <p class="sec-label local-only">new screening (this device)</p>
         <p class="host-hint cloud-only">
-          <strong>Picks open / picks lock</strong> set when members can lock their film online. After lock, you can draw. Stops last-minute pile-ons and keeps night-of simple.
+          <strong>Picks lock</strong> is the hard cutoff (then you draw).
+          <strong>Picks open</strong> is when the window starts — before that, members can join and see the countdown but can’t submit yet (stops people locking in before you’re ready).
+          Set opens to “now” if you don’t care about a start delay.
         </p>
         <p class="host-hint local-only">
           Everything for this screening stays in this browser. Save to create the join code and guest link.
