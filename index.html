@@ -22,6 +22,10 @@
         <div class="tap-dot" id="d4"></div>
       </div>
       <p class="tagline">the film pool</p>
+      <p class="entry-hosting-hint">Hosting a screening? Tap the logo <strong>five times</strong>.</p>
+      <p class="entry-build-hint local-only" id="entry-build-hint">
+        Offline demo: rooms exist only in this browser. For the real club site, open the link your host sent (with sign-in).
+      </p>
       <div class="door-wrap">
         <svg width="130" height="175" viewBox="0 0 130 175" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <rect x="8" y="8" width="114" height="159" rx="5" fill="#111118" stroke="#2a2a35" stroke-width="1" />
@@ -35,10 +39,10 @@
         </svg>
       </div>
       <div id="auth-block" class="auth-block" hidden>
+        <p class="entry-step-label cloud-only">1 · Sign in with the email your host invited</p>
         <p class="sec-label">member sign-in</p>
         <p class="auth-hint">
-          Enter your <strong>join code</strong> for this screening below. Use the <strong>same email</strong> the host invited.
-          You must be signed in before <strong>enter</strong> will open the room—the code alone is not enough.
+          Use the <strong>same email</strong> the host used for your invite. You must finish sign-in before <strong>enter</strong> opens the room — the join code alone is not enough.
         </p>
         <p class="auth-hint auth-hint-muted">
           If <strong>send sign-in link</strong> says rate limit, wait a bit and try again—or use <strong>sign in with password</strong>
@@ -59,6 +63,7 @@
         <button type="button" class="link-btn auth-out" id="entry-sign-out-btn" hidden>sign out</button>
       </div>
       <div class="code-wrap">
+        <p class="entry-step-label cloud-only" id="entry-step-2">2 · Join code, then enter</p>
         <p class="code-label">join code</p>
         <input id="code-input" type="text" placeholder="your code" maxlength="12" autocomplete="off" autocapitalize="characters" />
         <p class="err" id="err-msg"></p>
@@ -108,6 +113,12 @@
           <div class="stat-num stat-num-text" id="submission-window-line">&mdash;</div>
           <div class="stat-label">pick window</div>
         </div>
+      </div>
+      <div class="blind-pool-intro-wrap cloud-only" id="blind-pool-intro-wrap" hidden>
+        <p class="blind-pool-intro-text" id="blind-pool-intro-text">
+          You won&rsquo;t see anyone else&rsquo;s film or the full list until the host draws and reads the slip &mdash; that&rsquo;s on purpose.
+        </p>
+        <button type="button" class="link-btn" id="blind-pool-intro-dismiss" aria-label="Dismiss">okay, hide this</button>
       </div>
       <div class="main-board local-only">
         <div class="board-section">
@@ -222,6 +233,15 @@
             <input type="text" id="share-url-input" readonly />
           </div>
           <button type="button" class="btn-secondary" id="copy-share-btn">copy link</button>
+        </div>
+        <div id="host-first-run-card" class="host-first-run-card cloud-only" hidden>
+          <p class="sec-label">first screening checklist</p>
+          <ol class="host-checklist">
+            <li><strong>Host key</strong> is saved on this device after you created — don&rsquo;t clear site data here, or paste the key again under &ldquo;host key on this device.&rdquo;</li>
+            <li>In <strong>Supabase → Authentication → URL Configuration</strong>, add your live site URL and redirect patterns so magic links and invites return here.</li>
+            <li>Use <strong>the list (invite-only)</strong> below to email members, then tell them: sign in on this site (step 1), then enter the join code (step 2).</li>
+          </ol>
+          <button type="button" class="link-btn" id="dismiss-host-checklist">got it — hide checklist</button>
         </div>
         <div class="admin-row cloud-field attach-host-row">
           <label for="attach-host-secret">host key on this device</label>

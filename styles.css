@@ -1157,6 +1157,87 @@ body {
   text-overflow: ellipsis;
 }
 
+.entry-hosting-hint {
+  font-size: 11px;
+  color: #444;
+  text-align: center;
+  line-height: 1.45;
+  max-width: 320px;
+  margin: -0.25rem 0 0;
+}
+
+.entry-build-hint {
+  font-size: 11px;
+  color: #6a5a4a;
+  text-align: center;
+  line-height: 1.45;
+  max-width: 340px;
+  padding: 0.75rem 1rem;
+  background: #151018;
+  border: 0.5px solid #2a2528;
+  border-radius: 8px;
+  margin: 0.25rem 0 0;
+}
+
+.entry-step-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #c8a96e;
+  margin: 0 0 0.25rem;
+}
+
+.code-wrap .entry-step-label {
+  margin-bottom: 0.35rem;
+  text-align: center;
+  width: 100%;
+}
+
+.host-first-run-card {
+  margin-top: 1.25rem;
+  padding: 1.1rem 1.25rem;
+  background: #14141c;
+  border: 0.5px solid #2a2830;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.host-checklist {
+  margin: 0.5rem 0 0.75rem 1rem;
+  padding: 0;
+  font-size: 11px;
+  color: #7a7888;
+  line-height: 1.5;
+}
+
+.host-checklist li {
+  margin-bottom: 0.5rem;
+}
+
+.host-checklist strong {
+  color: #b8b0a0;
+  font-weight: 500;
+}
+
+.blind-pool-intro-wrap {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  background: #111118;
+  border: 0.5px solid #1e1e28;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.blind-pool-intro-text {
+  font-size: 11px;
+  color: #666;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .auth-block {
   width: 100%;
   max-width: 320px;

@@ -15,6 +15,40 @@ const BACKLOG_MAX = 5;
 const PICK_META_PREFIX = "ah_pickmeta_";
 const HOST_SECRET_PREFIX = "ah_host_";
 const PENDING_JOIN_KEY = "ah_pending_join_code";
+const BLIND_INTRO_LS = "ah_blind_intro_dismissed";
+const HOST_CHECKLIST_OK_PREFIX = "ah_host_checklist_ok_";
+
+function hostChecklistDismissKey(code) {
+  return HOST_CHECKLIST_OK_PREFIX + normalizeJoinCode(code).toLowerCase();
+}
+
+function hasInviteCodeInUrl() {
+  try {
+    return normalizeJoinCode(new URLSearchParams(location.search).get("code") || "").length >= 6;
+  } catch {
+    return false;
+  }
+}
+
+/** Maps Supabase Auth errors to clearer copy for invited members. */
+function friendlyAuthError(msg) {
+  const raw = String(msg || "");
+  const m = raw.toLowerCase();
+  if (!m.trim()) return "Something went wrong. Try again or ask your host.";
+  if (/invalid login credentials|invalid email or password|invalid credentials/i.test(m)) {
+    return "That email or password didn’t work. Use the same email your host invited, or ask them to confirm you’re on the list.";
+  }
+  if (/user (already registered|not found)|email address not authorized|signups not allowed|signup_disabled/i.test(m)) {
+    return "This email may not be invited yet. Ask your host to add you in the club, then try again.";
+  }
+  if (/email not confirmed|confirm your email/i.test(m)) {
+    return "Confirm your email from the inbox link first, then try signing in again.";
+  }
+  if (/rate limit|too many requests|email rate|seconds_until/i.test(m)) {
+    return "Too many sign-in emails. Wait a few minutes, use password sign-in if your host set that up, or try again later.";
+  }
+  return raw;
+}
 
 const sb =
   String(SUPABASE_URL || "").trim() && String(SUPABASE_ANON_KEY || "").trim()
@@ -702,6 +736,25 @@ function renderMainStats() {
     updateAddSectionForPickWindow();
     renderPickStatusAndActions();
   }
+  updateBlindPoolIntro();
+}
+
+function updateBlindPoolIntro() {
+  const w = $("blind-pool-intro-wrap");
+  if (!w) return;
+  if (!isCloudMode()) {
+    w.hidden = true;
+    return;
+  }
+  try {
+    if (localStorage.getItem(BLIND_INTRO_LS) === "1") {
+      w.hidden = true;
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
+  w.hidden = false;
 }
 
 function renderDevLadder() {
@@ -1029,7 +1082,7 @@ async function enterSite() {
   if (isCloudMode()) {
     const { data: sess } = await sb.auth.getSession();
     if (!sess?.session) {
-      $("err-msg").textContent = "Sign in above first, then enter.";
+      $("err-msg").textContent = "Sign in first (step 1), then tap Enter again.";
       return;
     }
     try {
@@ -1070,7 +1123,12 @@ async function enterSite() {
     /* ignore */
   }
   if (!raw) {
-    $("err-msg").textContent = "no room with that code on this device";
+    if (hasInviteCodeInUrl()) {
+      $("err-msg").textContent =
+        "This page isn’t connected to your club’s server (the live site needs Supabase in the build). Open the link your host sent, or ask them to check the deployment — offline demo only stores rooms on this device.";
+    } else {
+      $("err-msg").textContent = "no room with that code on this device";
+    }
     $("code-input").value = "";
     $("code-input").focus();
     return;
@@ -1498,6 +1556,16 @@ async function createRoomOnServer() {
   renderAdminPool();
   renderWinner();
   toast("screening created — save the host key on this device");
+  const hostCard = $("host-first-run-card");
+  if (hostCard && isCloudMode()) {
+    let dismissed = false;
+    try {
+      dismissed = localStorage.getItem(hostChecklistDismissKey(state.joinCode)) === "1";
+    } catch {
+      dismissed = false;
+    }
+    hostCard.hidden = dismissed;
+  }
 }
 
 async function sendInvitesFromHost() {
@@ -1616,6 +1684,35 @@ function bindEvents() {
 
   const createBtn = $("create-room-btn");
   if (createBtn) createBtn.addEventListener("click", () => createRoomOnServer());
+
+  const dismissCk = $("dismiss-host-checklist");
+  if (dismissCk) {
+    dismissCk.addEventListener("click", () => {
+      const card = $("host-first-run-card");
+      if (card) card.hidden = true;
+      const c = normalizeJoinCode(state.joinCode || getLastHostCode() || "");
+      if (c.length >= 6) {
+        try {
+          localStorage.setItem(hostChecklistDismissKey(c), "1");
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  }
+
+  const blindDismiss = $("blind-pool-intro-dismiss");
+  if (blindDismiss) {
+    blindDismiss.addEventListener("click", () => {
+      const w = $("blind-pool-intro-wrap");
+      if (w) w.hidden = true;
+      try {
+        localStorage.setItem(BLIND_INTRO_LS, "1");
+      } catch {
+        /* ignore */
+      }
+    });
+  }
 
   const saveHostSecret = $("save-host-secret-btn");
   if (saveHostSecret) {
@@ -1811,11 +1908,7 @@ function bindEvents() {
       });
       if (st) st.hidden = false;
       if (error) {
-        let msg = error.message;
-        if (/rate limit|too many|email.*limit/i.test(msg)) {
-          msg += " Try password sign-in or wait and try the link again.";
-        }
-        if (st) st.textContent = msg;
+        if (st) st.textContent = friendlyAuthError(error.message);
         return;
       }
       if (st) st.textContent = "Check your email for the sign-in link.";
@@ -1849,7 +1942,7 @@ function bindEvents() {
       const { error } = await sb.auth.signInWithPassword({ email, password });
       if (st) st.hidden = false;
       if (error) {
-        if (st) st.textContent = error.message;
+        if (st) st.textContent = friendlyAuthError(error.message);
         return;
       }
       if (st) st.textContent = "Signed in — tap Enter or the room may open automatically.";
