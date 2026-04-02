@@ -1998,6 +1998,13 @@ function bindEvents() {
 
 /** After magic link or password sign-in — member sets their own password via Supabase updateUser. */
 async function saveMemberChosenPassword(p1Raw, p2Raw, feedbackEl) {
+  if (!sb) {
+    if (feedbackEl) {
+      feedbackEl.hidden = false;
+      feedbackEl.textContent = "Cloud sign-in isn’t available on this build.";
+    }
+    return false;
+  }
   const p1 = String(p1Raw || "").trim();
   const p2 = String(p2Raw || "").trim();
   if (!p1 || p1.length < 6) {
