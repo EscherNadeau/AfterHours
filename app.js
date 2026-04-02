@@ -199,7 +199,7 @@ function applyBuildMode() {
     hint.hidden = isCloudMode();
     hint.textContent = isCloudMode()
       ? ""
-      : "Running without Supabase: picks stay on this device only. Set SUPABASE_URL and SUPABASE_ANON_KEY for the club sync.";
+      : "Offline mode: picks stay on this device only. Deploy the club build with all env vars for synced rooms.";
   }
   const pch = $("pick-cloud-hint");
   if (pch) pch.hidden = !isCloudMode();
@@ -316,9 +316,9 @@ function fmtLocalRange(openIso, closeIso) {
   if (!openIso || !closeIso) return "Submission times not set.";
   const a = new Date(openIso);
   const b = new Date(closeIso);
-  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return "Submission times not set.";
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return "Pick times not set yet.";
   const opt = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
-  return `Open ${a.toLocaleString(undefined, opt) } → close ${b.toLocaleString(undefined, opt)}`;
+  return `Opens ${a.toLocaleString(undefined, opt)} · locks ${b.toLocaleString(undefined, opt)}`;
 }
 
 function renderSubmissionWindowLine() {
@@ -460,13 +460,13 @@ function renderPickStatusAndActions() {
     );
     if (st === "before_open") {
       status.hidden = false;
-      status.textContent = "Submissions are not open yet.";
+      status.textContent = "Picks aren’t open yet for this night.";
       actions.innerHTML = "";
       return;
     }
     if (st === "closed") {
       status.hidden = false;
-      status.textContent = "Submission window closed.";
+      status.textContent = "Pick window closed for this night.";
       actions.innerHTML = "";
       return;
     }
@@ -484,6 +484,65 @@ function renderPickStatusAndActions() {
     '<button type="button" class="btn-text" id="change-pick-btn">change my pick (one time)</button>';
   const btn = $("change-pick-btn");
   if (btn) btn.addEventListener("click", beginChangePick);
+}
+
+function updateAddSectionForPickWindow() {
+  const waitEl = $("pick-window-wait");
+  const lockBlock = $("add-pick-lock-block");
+  const searchHintCloud = $("search-hint-cloud");
+  const addTitle = $("add-section-title");
+  const pickCloud = $("pick-cloud-hint");
+
+  if (!waitEl || !lockBlock) return;
+
+  if (!isCloudMode() || !state.roomPublic) {
+    waitEl.hidden = true;
+    lockBlock.style.display = "";
+    if (searchHintCloud) searchHintCloud.hidden = true;
+    if (addTitle) addTitle.textContent = "add your pick";
+    if (pickCloud) pickCloud.hidden = true;
+    return;
+  }
+
+  const idle = !state.myPick && !state.awaitingRepick;
+  if (!idle) {
+    waitEl.hidden = true;
+    lockBlock.style.display = "";
+    if (searchHintCloud) searchHintCloud.hidden = true;
+    if (addTitle) addTitle.textContent = "add your pick";
+    if (pickCloud) pickCloud.hidden = false;
+    return;
+  }
+
+  const st = submissionsWindowStatus(
+    new Date(),
+    state.roomPublic.submissions_open_at,
+    state.roomPublic.submissions_close_at
+  );
+  const op = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
+
+  if (st === "before_open") {
+    const t = new Date(state.roomPublic.submissions_open_at).toLocaleString(undefined, op);
+    waitEl.hidden = false;
+    waitEl.textContent = `You’re in the right place — countdown and pick window are above. Names and official picks unlock at ${t}. Until then, use search only to stash ideas with “next week.”`;
+    lockBlock.style.display = "none";
+    if (searchHintCloud) searchHintCloud.hidden = false;
+    if (addTitle) addTitle.textContent = "browse films";
+    if (pickCloud) pickCloud.hidden = true;
+  } else if (st === "closed") {
+    waitEl.hidden = false;
+    waitEl.textContent = `Pick window closed for this night. You can still search and save titles for another week with “next week.”`;
+    lockBlock.style.display = "none";
+    if (searchHintCloud) searchHintCloud.hidden = false;
+    if (addTitle) addTitle.textContent = "browse films";
+    if (pickCloud) pickCloud.hidden = true;
+  } else {
+    waitEl.hidden = true;
+    lockBlock.style.display = "";
+    if (searchHintCloud) searchHintCloud.hidden = true;
+    if (addTitle) addTitle.textContent = "add your pick";
+    if (pickCloud) pickCloud.hidden = false;
+  }
 }
 
 function renderMainStats() {
@@ -507,6 +566,7 @@ function renderMainStats() {
   if (state.awaitingRepick && !state.myPick) {
     $("add-section").style.display = "flex";
     $("my-pick-section").style.display = "none";
+    updateAddSectionForPickWindow();
   } else if (state.myPick) {
     $("add-section").style.display = "none";
     $("my-pick-section").style.display = "flex";
@@ -518,6 +578,7 @@ function renderMainStats() {
   } else {
     $("add-section").style.display = "flex";
     $("my-pick-section").style.display = "none";
+    updateAddSectionForPickWindow();
     renderPickStatusAndActions();
   }
 }
@@ -645,9 +706,9 @@ function renderAdminPool() {
     if (hint) {
       hint.hidden = false;
       if (st !== "closed") {
-        hint.textContent = "Draw unlocks after the submission close time.";
+        hint.textContent = "Draw unlocks after picks lock.";
       } else {
-        hint.textContent = "Window closed — you can draw from the pool.";
+        hint.textContent = "Picks are locked — you can draw.";
       }
     }
   } else if (hint) hint.hidden = true;
@@ -847,7 +908,7 @@ async function enterSite() {
   if (isCloudMode()) {
     const { data: sess } = await sb.auth.getSession();
     if (!sess?.session) {
-      $("err-msg").textContent = "sign in with your invited email first";
+      $("err-msg").textContent = "Sign in above first, then enter.";
       return;
     }
     try {
@@ -1118,7 +1179,7 @@ async function addFilm(f) {
       state.roomPublic.submissions_close_at
     );
     if (st !== "open") {
-      toast("submissions are not open for this room");
+      toast("Picks aren’t open for this screening.");
       return;
     }
     const year = f.release_date ? f.release_date.slice(0, 4) : "";
@@ -1264,12 +1325,12 @@ async function createRoomOnServer() {
   const openIso = toIsoFromDatetimeLocal(openV);
   const closeIso = toIsoFromDatetimeLocal(closeV);
   if (!openIso || !closeIso) {
-    toast("set submissions open and close");
+    toast("set picks open and lock times");
     return;
   }
   const pin = ($("host-pin-input")?.value || "").trim();
   if (!pin) {
-    toast("enter the host PIN (Netlify CLUB_HOST_PIN)");
+      toast("enter your host password");
     return;
   }
 
@@ -1327,7 +1388,7 @@ async function sendInvitesFromHost() {
   }
   const pin = ($("host-pin-input")?.value || "").trim();
   if (!pin) {
-    toast("enter the host PIN (same as create screening)");
+    toast("enter your host password (same as create screening)");
     return;
   }
   const redirectTo = ($("invite-redirect-to")?.value || "").trim();
@@ -1631,8 +1692,7 @@ function bindEvents() {
       if (error) {
         let msg = error.message;
         if (/rate limit|too many|email.*limit/i.test(msg)) {
-          msg +=
-            " Use sign in with password (set a password on your user in Supabase → Authentication → Users) or wait and retry.";
+          msg += " Try password sign-in or wait and try the link again.";
         }
         if (st) st.textContent = msg;
         return;

@@ -41,9 +41,8 @@
           You must be signed in before <strong>enter</strong> will open the room—the code alone is not enough.
         </p>
         <p class="auth-hint auth-hint-muted">
-          <strong>Send sign-in link</strong> emails you a magic link. Supabase’s built-in mail is <strong>rate-limited</strong>
-          — if you see “rate limit exceeded,” wait, ask the host to set up SMTP, or use <strong>sign in with password</strong>
-          (set a password for your user in Supabase <strong>Authentication → Users</strong> if you don’t have one yet).
+          If <strong>send sign-in link</strong> says rate limit, wait a bit and try again—or use <strong>sign in with password</strong>
+          if the host gave you one.
         </p>
         <div class="admin-row">
           <label for="auth-email">email</label>
@@ -52,8 +51,8 @@
         <button type="button" class="btn-secondary" id="send-magic-btn">send sign-in link</button>
         <p class="auth-or" aria-hidden="true">or</p>
         <div class="admin-row">
-          <label for="auth-password">password <span class="auth-label-note">(if set in Supabase)</span></label>
-          <input type="password" id="auth-password" autocomplete="current-password" placeholder="set under Users → your email" />
+          <label for="auth-password">password <span class="auth-label-note">(if the host set one up)</span></label>
+          <input type="password" id="auth-password" autocomplete="current-password" placeholder="optional" />
         </div>
         <button type="button" class="btn-secondary" id="sign-in-password-btn">sign in with password</button>
         <p class="auth-status" id="auth-status" hidden></p>
@@ -106,13 +105,13 @@
       <div class="stats-row cloud-only" id="stats-row-cloud" hidden>
         <div class="stat-card" id="submission-window-card">
           <div class="stat-num stat-num-text" id="submission-window-line">&mdash;</div>
-          <div class="stat-label">submissions</div>
+          <div class="stat-label">pick window</div>
         </div>
       </div>
       <div class="main-board local-only">
         <div class="board-section">
           <p class="sec-label">tonight&rsquo;s pool</p>
-          <p class="board-hint">Local mode: this list is only on this device. Deploy with Supabase for a blind, synced pool.</p>
+          <p class="board-hint">This list is only on this device in offline mode.</p>
           <ul class="board-list" id="pool-peek-list"></ul>
         </div>
         <div class="board-section">
@@ -129,11 +128,17 @@
         </div>
       </div>
       <div class="add-section" id="add-section">
-        <p class="sec-label">add your pick</p>
-        <p class="pick-caution cloud-only" id="pick-cloud-hint" hidden>Films in the live pool are hidden from other members until the host reads the slip.</p>
-        <p class="pick-caution">One official pick per night &mdash; you get one change if you rethink. Use <strong>next week</strong> on a result to stash an idea without locking in.</p>
-        <p class="pick-caution repick-banner" id="repick-banner" hidden>Choose your replacement &mdash; this counts as your one change; next pick is final.</p>
-        <input id="name-input" type="text" placeholder="your name" maxlength="24" />
+        <p class="sec-label" id="add-section-title">add your pick</p>
+        <p class="pick-window-wait" id="pick-window-wait" hidden></p>
+        <p class="pick-caution cloud-only" id="pick-cloud-hint" hidden>Nobody else sees what you chose until the host reads the slip.</p>
+        <div id="add-pick-lock-block">
+          <p class="pick-caution" id="pick-lock-hint">
+            One film for this night &mdash; one change if you rethink. Use <strong>next week</strong> on a search result to save an idea without locking in.
+          </p>
+          <p class="pick-caution repick-banner" id="repick-banner" hidden>Choose your replacement &mdash; this counts as your one change; next pick is final.</p>
+          <input id="name-input" type="text" placeholder="your name (shown on your pick)" maxlength="24" />
+        </div>
+        <p class="pick-caution cloud-only" id="search-hint-cloud" hidden>Search still works below to stash films <strong>for another night</strong>.</p>
         <div class="search-row">
           <input id="film-search" type="text" placeholder="search a film..." />
           <button type="button" id="search-btn">search</button>
@@ -169,10 +174,10 @@
         <p class="sec-label cloud-only">new screening (cloud)</p>
         <p class="sec-label local-only">new screening (this device)</p>
         <p class="host-hint cloud-only">
-          Creates a row in Supabase. Set submission open/close so members can only submit in that window; draw is allowed after close.
+          <strong>Picks open / picks lock</strong> set when members can lock their film online. After lock, you can draw. Stops last-minute pile-ons and keeps night-of simple.
         </p>
         <p class="host-hint local-only">
-          Everything stays in this browser until you deploy with Supabase env vars. First save creates the join code and guest link here only.
+          Everything for this screening stays in this browser. Save to create the join code and guest link.
         </p>
         <div class="admin-row">
           <label for="room-name-input">name</label>
@@ -183,11 +188,11 @@
           <input type="datetime-local" id="event-dt" />
         </div>
         <div class="admin-row cloud-field">
-          <label for="submissions-open-dt">submissions open</label>
+          <label for="submissions-open-dt">picks open</label>
           <input type="datetime-local" id="submissions-open-dt" />
         </div>
         <div class="admin-row cloud-field">
-          <label for="submissions-close-dt">submissions close</label>
+          <label for="submissions-close-dt">picks lock (deadline)</label>
           <input type="datetime-local" id="submissions-close-dt" />
         </div>
         <div class="admin-row">
@@ -195,8 +200,8 @@
           <input type="text" id="yt-url-input" placeholder="https://youtube.com/watch?v=..." />
         </div>
         <div class="admin-row cloud-field">
-          <label for="host-pin-input">host PIN (Netlify <code class="inline-code">CLUB_HOST_PIN</code>)</label>
-          <input type="password" id="host-pin-input" autocomplete="off" placeholder="required to create room" />
+          <label for="host-pin-input">host password</label>
+          <input type="password" id="host-pin-input" autocomplete="off" placeholder="the one you set for this site" />
         </div>
         <button type="button" class="admin-save cloud-field" id="create-room-btn">create screening &amp; join code</button>
         <button type="button" class="admin-save local-only" id="save-settings">save room (local)</button>
@@ -213,7 +218,7 @@
         </div>
         <div class="admin-row cloud-field attach-host-row">
           <label for="attach-host-secret">host key on this device</label>
-          <p class="host-hint">Paste the <strong>host key</strong> you saved when the room was created (UUID). Needed to list the pool and draw.</p>
+          <p class="host-hint">Paste the <strong>host key</strong> from when you created the screening. It unlocks the full list and the draw on this device only. Never give it to members.</p>
           <input type="text" id="attach-host-secret" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" />
           <button type="button" class="btn-secondary" id="save-host-secret-btn">save host key</button>
         </div>
@@ -222,10 +227,7 @@
       <div class="admin-section cloud-only" id="invite-members-section">
         <p class="sec-label">the list (invite-only)</p>
         <p class="host-hint invite-flair">
-          Paste emails — Supabase sends the official <strong>Invite</strong> message. Edit the look and copy under
-          <strong>Authentication → Emails → Invite user</strong> (that’s your speakeasy doorway). Uses the same
-          <strong>host PIN</strong> as “create screening.” After someone accepts the email, they still use
-          <strong>Send sign-in link</strong> on the front door unless you’ve set up passwords.
+          Paste addresses and send your club’s invite email. Same <strong>host password</strong> as creating a screening. Tone and styling are edited in your project email settings if you want a fancier template.
         </p>
         <div class="admin-row">
           <label for="invite-emails">emails (comma, space, or line)</label>
@@ -240,7 +242,7 @@
         <div class="admin-row">
           <label for="invite-redirect-to">after invite — send them here</label>
           <input type="text" id="invite-redirect-to" readonly />
-          <p class="host-hint">Must be listed under Supabase <strong>Authentication → URL Configuration → Redirect URLs</strong> (try adding your site root and <code class="inline-code">https://yoursite.com/**</code>).</p>
+          <p class="host-hint">This link must be allowed in your auth project’s “redirect URLs” so invites land back on the site with the join code.</p>
         </div>
         <button type="button" class="admin-save" id="send-invites-btn">send invites</button>
         <pre class="invite-results" id="invite-results" hidden></pre>
