@@ -342,24 +342,23 @@ function submissionsWindowStatus(now, openAt, closeAt) {
   return "open";
 }
 
-function renderCountdown() {
-  const el = $("cd-display");
-  if (!state.eventDt) {
-    el.innerHTML = '<p class="cd-no-date">date tbd — check back soon</p>';
-    return;
+function hasPickNightTimeline(rp) {
+  if (!rp || !state.eventDt) return false;
+  const o = new Date(rp.submissions_open_at).getTime();
+  const c = new Date(rp.submissions_close_at).getTime();
+  const e = new Date(state.eventDt).getTime();
+  return !Number.isNaN(o) && !Number.isNaN(c) && !Number.isNaN(e) && e > o;
+}
+
+function countdownDigitsHtml(diffMs) {
+  if (diffMs <= 0) {
+    return '<p class="cd-no-date" style="color:#c8a96e;">tonight is the night</p>';
   }
-  function tick() {
-    const diff = new Date(state.eventDt).getTime() - Date.now();
-    if (diff <= 0) {
-      el.innerHTML =
-        '<p class="cd-no-date" style="color:#c8a96e;">tonight is the night</p>';
-      return;
-    }
-    const d = Math.floor(diff / 86400000);
-    const h = Math.floor((diff % 86400000) / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    const sec = Math.floor((diff % 60000) / 1000);
-    el.innerHTML = `<div class="cd-digits">
+  const d = Math.floor(diffMs / 86400000);
+  const h = Math.floor((diffMs % 86400000) / 3600000);
+  const m = Math.floor((diffMs % 3600000) / 60000);
+  const sec = Math.floor((diffMs % 60000) / 1000);
+  return `<div class="cd-digits">
       <div class="cd-unit"><span class="cd-num">${pad(d)}</span><span class="cd-sub">days</span></div>
       <span class="cd-sep">:</span>
       <div class="cd-unit"><span class="cd-num">${pad(h)}</span><span class="cd-sub">hrs</span></div>
@@ -368,9 +367,113 @@ function renderCountdown() {
       <span class="cd-sep">:</span>
       <div class="cd-unit"><span class="cd-num">${pad(sec)}</span><span class="cd-sub">sec</span></div>
     </div>`;
-  }
-  tick();
+}
+
+function renderCountdown() {
+  const el = $("cd-display");
+  const heroLabel = $("cd-hero-label");
+  const timeline = $("cd-timeline");
+  if (!el) return;
+
   if (cdInterval) clearInterval(cdInterval);
+  cdInterval = null;
+
+  const rp = state.roomPublic;
+  const useTimeline = isCloudMode() && hasPickNightTimeline(rp);
+
+  if (timeline) timeline.hidden = !useTimeline;
+
+  if (!useTimeline && !state.eventDt) {
+    if (heroLabel) heroLabel.textContent = "next screening";
+    el.innerHTML = '<p class="cd-no-date">date tbd — check back soon</p>';
+    return;
+  }
+
+  const stopFmt = {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  };
+
+  function tick() {
+    const now = Date.now();
+
+    if (useTimeline) {
+      const openMs = new Date(rp.submissions_open_at).getTime();
+      const lockMs = new Date(rp.submissions_close_at).getTime();
+      const eventMs = new Date(state.eventDt).getTime();
+      const denom = eventMs - openMs;
+      const lockPct =
+        denom > 0
+          ? Math.min(1, Math.max(0, (lockMs - openMs) / denom))
+          : 0.5;
+      const markerPct =
+        denom > 0 ? Math.min(1, Math.max(0, (now - openMs) / denom)) : 1;
+
+      let targetMs = eventMs;
+      let label = "until screening";
+      if (now < openMs) {
+        targetMs = openMs;
+        label = "until picks open";
+      } else if (now < lockMs) {
+        targetMs = lockMs;
+        label = "until picks lock";
+      } else if (now < eventMs) {
+        targetMs = eventMs;
+        label = "until screening";
+      }
+
+      if (heroLabel) {
+        heroLabel.textContent = now >= eventMs ? "tonight" : label;
+      }
+
+      if (now >= eventMs) {
+        el.innerHTML =
+          '<p class="cd-no-date" style="color:#c8a96e;">tonight is the night</p>';
+      } else {
+        el.innerHTML = countdownDigitsHtml(targetMs - now);
+      }
+
+      const oLabel = new Date(openMs).toLocaleString(undefined, stopFmt);
+      const lLabel = new Date(lockMs).toLocaleString(undefined, stopFmt);
+      const eLabel = new Date(eventMs).toLocaleString(undefined, stopFmt);
+      const fillW = Math.min(100, markerPct * 100);
+
+      if (timeline) {
+        timeline.innerHTML = `<div class="cd-timeline-inner" aria-hidden="true">
+        <div class="cd-timeline-track">
+          <div class="cd-timeline-fill" style="width:${fillW}%"></div>
+          <div class="cd-timeline-node" style="left:0%"></div>
+          <div class="cd-timeline-node" style="left:${lockPct * 100}%"></div>
+          <div class="cd-timeline-node" style="left:100%"></div>
+          <div class="cd-timeline-marker" style="left:${markerPct * 100}%"></div>
+        </div>
+        <div class="cd-timeline-stops">
+          <div class="cd-t-stop">
+            <span class="cd-t-stop-k">Picks open</span>
+            <span class="cd-t-stop-t">${escapeHtml(oLabel)}</span>
+          </div>
+          <div class="cd-t-stop">
+            <span class="cd-t-stop-k">Picks lock</span>
+            <span class="cd-t-stop-t">${escapeHtml(lLabel)}</span>
+          </div>
+          <div class="cd-t-stop">
+            <span class="cd-t-stop-k">Screening</span>
+            <span class="cd-t-stop-t">${escapeHtml(eLabel)}</span>
+          </div>
+        </div>
+      </div>`;
+      }
+    } else {
+      if (timeline) timeline.innerHTML = "";
+      if (heroLabel) heroLabel.textContent = "next screening";
+      const diff = new Date(state.eventDt).getTime() - now;
+      el.innerHTML = countdownDigitsHtml(diff);
+    }
+  }
+
+  tick();
   cdInterval = setInterval(tick, 1000);
 }
 

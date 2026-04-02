@@ -580,6 +580,97 @@ body {
   padding: 0.5rem 0;
 }
 
+.cd-timeline {
+  width: 100%;
+  margin-top: 0.25rem;
+  text-align: left;
+}
+
+.cd-timeline-track {
+  position: relative;
+  height: 8px;
+  margin: 0.75rem 0 1rem;
+  border-radius: 4px;
+  background: #1a1a22;
+}
+
+.cd-timeline-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  max-width: 100%;
+  border-radius: 4px 0 0 4px;
+  background: linear-gradient(90deg, #3d3426, #c8a96e55);
+  pointer-events: none;
+}
+
+.cd-timeline-node {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: #c8a96e;
+  border: 2px solid #111118;
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+.cd-timeline-marker {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 20px;
+  margin-top: -10px;
+  margin-left: -1.5px;
+  border-radius: 1px;
+  background: #e8d4a8;
+  box-shadow: 0 0 8px rgba(200, 169, 110, 0.45);
+  z-index: 3;
+}
+
+.cd-timeline-stops {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.35rem;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.cd-t-stop {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cd-t-stop:nth-child(1) {
+  text-align: left;
+}
+
+.cd-t-stop:nth-child(2) {
+  text-align: center;
+}
+
+.cd-t-stop:nth-child(3) {
+  text-align: right;
+}
+
+.cd-t-stop-k {
+  color: #888;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cd-t-stop-t {
+  color: #c8c8b8;
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
 .stats-row {
   display: flex;
   gap: 10px;
