@@ -34,11 +34,23 @@
           <line x1="65" y1="17" x2="65" y2="158" stroke="#2a2a35" stroke-width=".5" />
         </svg>
       </div>
+      <div id="auth-block" class="auth-block" hidden>
+        <p class="sec-label">member sign-in</p>
+        <p class="auth-hint">Invited members: enter the email from your invite, then use the link from your inbox.</p>
+        <div class="admin-row">
+          <label for="auth-email">email</label>
+          <input type="email" id="auth-email" autocomplete="email" placeholder="you@example.com" />
+        </div>
+        <button type="button" class="btn-secondary" id="send-magic-btn">send sign-in link</button>
+        <p class="auth-status" id="auth-status" hidden></p>
+        <button type="button" class="link-btn auth-out" id="entry-sign-out-btn" hidden>sign out</button>
+      </div>
       <div class="code-wrap">
         <p class="code-label">join code</p>
         <input id="code-input" type="text" placeholder="your code" maxlength="12" autocomplete="off" autocapitalize="characters" />
         <p class="err" id="err-msg"></p>
         <button type="button" id="enter-btn">enter</button>
+        <p class="offline-hint" id="offline-hint" hidden></p>
       </div>
     </div>
 
@@ -61,37 +73,62 @@
     <div id="main-screen" class="screen">
       <div class="top-bar">
         <span class="top-logo">after<span>.</span>hours</span>
-        <span class="room-badge" id="room-badge" title=""></span>
+        <div class="top-bar-right">
+          <span class="room-badge" id="room-badge" title=""></span>
+          <button type="button" class="link-btn top-sign-out" id="main-sign-out-btn" hidden>sign out</button>
+        </div>
       </div>
       <p class="screening-title" id="room-title-line" hidden></p>
       <div class="countdown-block">
         <p class="cd-label">next screening</p>
         <div id="cd-display"></div>
       </div>
-      <div class="stats-row">
+      <div class="stats-row local-only" id="stats-row-local">
         <div class="stat-card">
           <div class="stat-num" id="film-count-stat">0</div>
           <div class="stat-label">films in pool</div>
         </div>
       </div>
+      <div class="stats-row cloud-only" id="stats-row-cloud" hidden>
+        <div class="stat-card" id="submission-window-card">
+          <div class="stat-num stat-num-text" id="submission-window-line">&mdash;</div>
+          <div class="stat-label">submissions</div>
+        </div>
+      </div>
+      <div class="main-board local-only">
+        <div class="board-section">
+          <p class="sec-label">tonight&rsquo;s pool</p>
+          <p class="board-hint">Local mode: this list is only on this device. Deploy with Supabase for a blind, synced pool.</p>
+          <ul class="board-list" id="pool-peek-list"></ul>
+        </div>
+        <div class="board-section">
+          <p class="sec-label">for another night</p>
+          <p class="board-hint">Your private list on this phone &mdash; not in tonight&rsquo;s draw. Add from search with <strong>next week</strong>.</p>
+          <ul class="board-list" id="backlog-list"></ul>
+        </div>
+      </div>
+      <div class="main-board cloud-only" id="main-board-cloud" hidden>
+        <div class="board-section">
+          <p class="sec-label">for another night</p>
+          <p class="board-hint">Saved on this device only. Add from search with <strong>next week</strong>.</p>
+          <ul class="board-list" id="backlog-list-cloud"></ul>
+        </div>
+      </div>
       <div class="add-section" id="add-section">
         <p class="sec-label">add your pick</p>
-        <p class="pick-caution">one official pick per night on this device — you get one change if you rethink. use <strong>next week</strong> on a result to stash an idea without locking in.</p>
-        <p class="pick-caution repick-banner" id="repick-banner" hidden>choose your replacement — this counts as your one change; next pick is final.</p>
+        <p class="pick-caution cloud-only" id="pick-cloud-hint" hidden>Films in the live pool are hidden from other members until the host reads the slip.</p>
+        <p class="pick-caution">One official pick per night &mdash; you get one change if you rethink. Use <strong>next week</strong> on a result to stash an idea without locking in.</p>
+        <p class="pick-caution repick-banner" id="repick-banner" hidden>Choose your replacement &mdash; this counts as your one change; next pick is final.</p>
         <input id="name-input" type="text" placeholder="your name" maxlength="24" />
         <div class="search-row">
           <input id="film-search" type="text" placeholder="search a film..." />
           <button type="button" id="search-btn">search</button>
         </div>
         <div class="results-list" id="results-list"></div>
-        <div id="backlog-section" class="backlog-section" hidden>
-          <p class="sec-label">saved for later</p>
-          <ul class="backlog-list" id="backlog-list"></ul>
-        </div>
       </div>
-      <div id="dev-panel" class="dev-panel" hidden>
+      <div id="dev-panel" class="dev-panel local-only" hidden>
         <p class="sec-label">dev mode <span class="dev-badge">?dev=1</span></p>
-        <p class="host-hint">fills the pool with three random fake submissions to test the presenter order.</p>
+        <p class="host-hint">fills the pool with three random fake submissions to test the presenter order (local mode only).</p>
         <button type="button" class="btn-secondary" id="dev-seed-btn">add 3 random picks</button>
         <div id="dev-ladder-wrap" class="dev-ladder-wrap" hidden>
           <p class="sec-label">presenter order (first 3 in pool)</p>
@@ -111,25 +148,45 @@
 
     <div id="host-screen" class="screen">
       <div class="admin-bar">
-        <span class="admin-title">create the room</span>
+        <span class="admin-title">host</span>
         <button type="button" id="back-btn">back</button>
       </div>
       <div class="admin-section">
-        <p class="sec-label">room</p>
+        <p class="sec-label cloud-only">new screening (cloud)</p>
+        <p class="sec-label local-only">new screening (this device)</p>
+        <p class="host-hint cloud-only">
+          Creates a row in Supabase. Set submission open/close so members can only submit in that window; draw is allowed after close.
+        </p>
+        <p class="host-hint local-only">
+          Everything stays in this browser until you deploy with Supabase env vars. First save creates the join code and guest link here only.
+        </p>
         <div class="admin-row">
           <label for="room-name-input">name</label>
           <input type="text" id="room-name-input" placeholder="e.g. March movie night" maxlength="80" />
         </div>
         <div class="admin-row">
-          <label for="event-dt">date &amp; time</label>
+          <label for="event-dt">screening date &amp; time</label>
           <input type="datetime-local" id="event-dt" />
+        </div>
+        <div class="admin-row cloud-field">
+          <label for="submissions-open-dt">submissions open</label>
+          <input type="datetime-local" id="submissions-open-dt" />
+        </div>
+        <div class="admin-row cloud-field">
+          <label for="submissions-close-dt">submissions close</label>
+          <input type="datetime-local" id="submissions-close-dt" />
         </div>
         <div class="admin-row">
           <label for="yt-url-input">welcome video (youtube url, optional)</label>
           <input type="text" id="yt-url-input" placeholder="https://youtube.com/watch?v=..." />
         </div>
-        <button type="button" class="admin-save" id="save-settings">save room</button>
-        <p class="host-hint">first save creates the join code and guest link. everything lives in each person&rsquo;s browser (no cloud sync yet).</p>
+        <div class="admin-row cloud-field">
+          <label for="host-pin-input">host PIN (Netlify <code class="inline-code">CLUB_HOST_PIN</code>)</label>
+          <input type="password" id="host-pin-input" autocomplete="off" placeholder="required to create room" />
+        </div>
+        <button type="button" class="admin-save cloud-field" id="create-room-btn">create screening &amp; join code</button>
+        <button type="button" class="admin-save local-only" id="save-settings">save room (local)</button>
+        <p class="host-hint local-only">Then use <strong>save room (local)</strong> below.</p>
         <div id="host-join-panel" class="host-join-panel" hidden>
           <p class="sec-label">share this</p>
           <div class="join-code-big" id="join-code-display"></div>
@@ -140,14 +197,53 @@
           </div>
           <button type="button" class="btn-secondary" id="copy-share-btn">copy link</button>
         </div>
+        <div class="admin-row cloud-field attach-host-row">
+          <label for="attach-host-secret">host key on this device</label>
+          <p class="host-hint">Paste the <strong>host key</strong> you saved when the room was created (UUID). Needed to list the pool and draw.</p>
+          <input type="text" id="attach-host-secret" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" />
+          <button type="button" class="btn-secondary" id="save-host-secret-btn">save host key</button>
+        </div>
         <p class="host-new-wrap"><button type="button" class="link-btn" id="start-new-room">start a new screening</button></p>
       </div>
+      <div class="admin-section cloud-only" id="invite-members-section">
+        <p class="sec-label">the list (invite-only)</p>
+        <p class="host-hint invite-flair">
+          Paste emails — Supabase sends the official <strong>Invite</strong> message. Edit the look and copy under
+          <strong>Authentication → Emails → Invite user</strong> (that’s your speakeasy doorway). Uses the same
+          <strong>host PIN</strong> as “create screening.” After someone accepts the email, they still use
+          <strong>Send sign-in link</strong> on the front door unless you’ve set up passwords.
+        </p>
+        <div class="admin-row">
+          <label for="invite-emails">emails (comma, space, or line)</label>
+          <textarea
+            id="invite-emails"
+            class="admin-textarea"
+            rows="4"
+            placeholder="ada@nightcinema.com&#10;grace@example.com"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="admin-row">
+          <label for="invite-redirect-to">after invite — send them here</label>
+          <input type="text" id="invite-redirect-to" readonly />
+          <p class="host-hint">Must be listed under Supabase <strong>Authentication → URL Configuration → Redirect URLs</strong> (try adding your site root and <code class="inline-code">https://yoursite.com/**</code>).</p>
+        </div>
+        <button type="button" class="admin-save" id="send-invites-btn">send invites</button>
+        <pre class="invite-results" id="invite-results" hidden></pre>
+      </div>
       <div class="admin-section">
-        <p class="sec-label">the pool (<span id="admin-pool-count">0</span>) — host only on this device</p>
+        <p class="sec-label">
+          the pool (<span id="admin-pool-count">0</span>) &mdash; host only<span class="local-only"> on this device</span>
+        </p>
+        <p class="host-hint" id="host-draw-hint" hidden>Draw unlocks after submissions close. Paper slip: copy title only; keep the pool blind for members.</p>
         <div class="pool-full" id="admin-pool-list"></div>
         <div class="admin-draw-row">
           <button type="button" class="draw-btn" id="admin-draw-btn" disabled>draw a film</button>
-          <button type="button" class="clear-btn" id="admin-clear-btn">clear pool</button>
+          <button type="button" class="clear-btn local-only" id="admin-clear-btn">clear pool</button>
+        </div>
+        <div class="slip-row" id="slip-row" hidden>
+          <button type="button" class="btn-secondary" id="copy-slip-btn">copy slip line (title)</button>
+          <button type="button" class="btn-secondary" id="copy-reveal-btn">copy reveal script</button>
         </div>
         <div id="winner-display"></div>
       </div>
@@ -156,6 +252,6 @@
     <div class="toast" id="toast"></div>
   </div>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

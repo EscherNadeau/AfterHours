@@ -1,14 +1,34 @@
 /**
- * after.hours — film pool (static; data in localStorage per join code on this device).
- * Real backend later: sync room, picks, and “one pick per person” server-side.
- * Production: `npm run build` with TMDB_API_KEY (Netlify env).
+ * after.hours — film pool: local (localStorage) or cloud (Supabase + blind submissions).
+ * Production: `npm run build` with TMDB_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY (Netlify).
  */
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
 const TMDB_KEY = "";
+const SUPABASE_URL = "";
+const SUPABASE_ANON_KEY = "";
 
 const LEGACY_KEY = "ah_state";
 const LAST_HOST_KEY = "ah_last_host_code";
 const JOIN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const BACKLOG_MAX = 5;
+const PICK_META_PREFIX = "ah_pickmeta_";
+const HOST_SECRET_PREFIX = "ah_host_";
+
+const sb =
+  String(SUPABASE_URL || "").trim() && String(SUPABASE_ANON_KEY || "").trim()
+    ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      })
+    : null;
+
+function isCloudMode() {
+  return !!sb;
+}
 
 const DEV_FILMS = [
   { id: -101, title: "After Hours", release_date: "1985-09-13", poster_path: null },
@@ -33,6 +53,8 @@ function freshState() {
     myPick: null,
     roomName: "",
     joinCode: "",
+    roomId: null,
+    roomPublic: null,
     myBacklog: [],
     awaitingRepick: false,
     pickFinal: false,
@@ -61,6 +83,54 @@ function normalizeJoinCode(s) {
 
 function roomStorageKey(code) {
   return "ah_room_" + normalizeJoinCode(code).toLowerCase();
+}
+
+function pickMetaKey(roomId) {
+  return PICK_META_PREFIX + roomId;
+}
+
+function hostSecretStorageKey(code) {
+  return HOST_SECRET_PREFIX + normalizeJoinCode(code).toLowerCase();
+}
+
+function getHostSecretForCode(code) {
+  try {
+    return localStorage.getItem(hostSecretStorageKey(code));
+  } catch {
+    return null;
+  }
+}
+
+function setHostSecretForCode(code, secret) {
+  try {
+    localStorage.setItem(hostSecretStorageKey(code), String(secret).trim());
+  } catch {
+    /* ignore */
+  }
+}
+
+function getPickMeta(roomId) {
+  if (!roomId) return { pickFinal: false, awaitingRepick: false };
+  try {
+    const raw = localStorage.getItem(pickMetaKey(roomId));
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return {
+      pickFinal: !!o.pickFinal,
+      awaitingRepick: !!o.awaitingRepick,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function setPickMeta(roomId, meta) {
+  if (!roomId) return;
+  try {
+    localStorage.setItem(pickMetaKey(roomId), JSON.stringify(meta));
+  } catch {
+    /* ignore */
+  }
 }
 
 function generateJoinCode(length) {
@@ -109,6 +179,29 @@ function setLastHostCode(code) {
   } catch {
     /* ignore */
   }
+}
+
+function applyBuildMode() {
+  document.querySelectorAll(".cloud-only").forEach((el) => {
+    el.hidden = !isCloudMode();
+  });
+  document.querySelectorAll(".local-only").forEach((el) => {
+    el.hidden = isCloudMode();
+  });
+  document.querySelectorAll(".cloud-field").forEach((el) => {
+    el.hidden = !isCloudMode();
+  });
+  const auth = $("auth-block");
+  if (auth) auth.hidden = !isCloudMode();
+  const hint = $("offline-hint");
+  if (hint) {
+    hint.hidden = isCloudMode();
+    hint.textContent = isCloudMode()
+      ? ""
+      : "Running without Supabase: picks stay on this device only. Set SUPABASE_URL and SUPABASE_ANON_KEY for the club sync.";
+  }
+  const pch = $("pick-cloud-hint");
+  if (pch) pch.hidden = !isCloudMode();
 }
 
 function ensurePickUids() {
@@ -178,7 +271,7 @@ function loadRoomIntoState(code) {
 }
 
 function save() {
-  if (!currentRoomSlug) return;
+  if (!currentRoomSlug || isCloudMode()) return;
   try {
     localStorage.setItem(roomStorageKey(currentRoomSlug), JSON.stringify(state));
   } catch {
@@ -196,10 +289,56 @@ function toast(msg) {
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
   $(id).classList.add("active");
+  const mainOut = $("main-sign-out-btn");
+  if (mainOut) mainOut.hidden = !(isCloudMode() && id === "main-screen");
 }
 
 function pad(n) {
   return String(n).padStart(2, "0");
+}
+
+/** For <input type="datetime-local"> from an ISO instant. */
+function isoToDatetimeLocalValue(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const t = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return t.toISOString().slice(0, 16);
+}
+
+function rpcFirstRow(data) {
+  if (data == null) return null;
+  return Array.isArray(data) ? data[0] ?? null : data;
+}
+
+function fmtLocalRange(openIso, closeIso) {
+  if (!openIso || !closeIso) return "Submission times not set.";
+  const a = new Date(openIso);
+  const b = new Date(closeIso);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return "Submission times not set.";
+  const opt = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
+  return `Open ${a.toLocaleString(undefined, opt) } → close ${b.toLocaleString(undefined, opt)}`;
+}
+
+function renderSubmissionWindowLine() {
+  const el = $("submission-window-line");
+  if (!el) return;
+  if (!isCloudMode() || !state.roomPublic) {
+    el.textContent = "—";
+    return;
+  }
+  const rp = state.roomPublic;
+  el.textContent = fmtLocalRange(rp.submissions_open_at, rp.submissions_close_at);
+}
+
+function submissionsWindowStatus(now, openAt, closeAt) {
+  const t = now.getTime();
+  const o = new Date(openAt).getTime();
+  const c = new Date(closeAt).getTime();
+  if (Number.isNaN(o) || Number.isNaN(c)) return "unknown";
+  if (t < o) return "before_open";
+  if (t > c) return "closed";
+  return "open";
 }
 
 function renderCountdown() {
@@ -247,22 +386,58 @@ function renderRoomTitle() {
   el.textContent = name;
 }
 
-function renderBacklog() {
-  const wrap = $("backlog-section");
-  const ul = $("backlog-list");
-  if (!wrap || !ul) return;
-  if (!state.myBacklog.length) {
-    wrap.hidden = true;
-    ul.innerHTML = "";
+function backlogUl() {
+  return isCloudMode() ? $("backlog-list-cloud") : $("backlog-list");
+}
+
+function renderPoolPeek() {
+  const ul = $("pool-peek-list");
+  if (!ul) return;
+  if (!state.pool.length) {
+    ul.innerHTML =
+      '<li class="board-placeholder">No films in the pool on this device yet.</li>';
     return;
   }
-  wrap.hidden = false;
+  ul.innerHTML = state.pool
+    .map(
+      (p) =>
+        `<li>${escapeHtml(p.title)}${p.year ? " (" + escapeHtml(p.year) + ")" : ""}<span class="board-by">by ${escapeHtml(p.addedBy)}</span></li>`
+    )
+    .join("");
+}
+
+function renderBacklog() {
+  const ul = backlogUl();
+  if (!ul) return;
+  if (!state.myBacklog.length) {
+    ul.innerHTML =
+      '<li class="board-placeholder">Nothing saved yet — use “next week” on a search result.</li>';
+    return;
+  }
   ul.innerHTML = state.myBacklog
     .map(
       (b) =>
         `<li>${escapeHtml(b.title)}${b.year ? " (" + escapeHtml(b.year) + ")" : ""}</li>`
     )
     .join("");
+}
+
+function syncPickMetaFromServerRow() {
+  if (!isCloudMode() || !state.roomId) return;
+  const meta = getPickMeta(state.roomId);
+  if (meta) {
+    state.pickFinal = meta.pickFinal;
+    state.awaitingRepick = meta.awaitingRepick;
+    return;
+  }
+  if (state.myPick) {
+    state.pickFinal = true;
+    state.awaitingRepick = false;
+    setPickMeta(state.roomId, { pickFinal: true, awaitingRepick: false });
+  } else {
+    state.pickFinal = false;
+    state.awaitingRepick = false;
+  }
 }
 
 function renderPickStatusAndActions() {
@@ -275,6 +450,27 @@ function renderPickStatusAndActions() {
     actions.innerHTML = "";
     return;
   }
+
+  if (isCloudMode() && state.roomPublic) {
+    const st = submissionsWindowStatus(
+      new Date(),
+      state.roomPublic.submissions_open_at,
+      state.roomPublic.submissions_close_at
+    );
+    if (st === "before_open") {
+      status.hidden = false;
+      status.textContent = "Submissions are not open yet.";
+      actions.innerHTML = "";
+      return;
+    }
+    if (st === "closed") {
+      status.hidden = false;
+      status.textContent = "Submission window closed.";
+      actions.innerHTML = "";
+      return;
+    }
+  }
+
   if (state.pickFinal) {
     status.hidden = false;
     status.textContent = "Locked in for this week — ask the host if something went wrong.";
@@ -290,12 +486,15 @@ function renderPickStatusAndActions() {
 }
 
 function renderMainStats() {
-  $("film-count-stat").textContent = state.pool.length;
+  const filmCount = $("film-count-stat");
+  if (filmCount) filmCount.textContent = state.pool.length;
   renderRoomTitle();
   const devP = $("dev-panel");
-  if (devP) devP.hidden = !devModeOn();
+  if (devP) devP.hidden = !devModeOn() || isCloudMode();
   renderDevLadder();
+  if (!isCloudMode()) renderPoolPeek();
   renderBacklog();
+  renderSubmissionWindowLine();
   const rb = $("room-badge");
   if (rb && state.joinCode) {
     rb.textContent = "code · " + state.joinCode;
@@ -328,7 +527,7 @@ function renderDevLadder() {
   const line = $("dev-active-line");
   const slotSpan = $("dev-active-slot");
   if (!wrap || !list || !line || !slotSpan) return;
-  if (!devModeOn() || state.pool.length < 1) {
+  if (!devModeOn() || isCloudMode() || state.pool.length < 1) {
     wrap.hidden = true;
     return;
   }
@@ -365,7 +564,7 @@ function shuffleInPlace(arr) {
 }
 
 function seedDevRandomPicks() {
-  if (!devModeOn()) return;
+  if (!devModeOn() || isCloudMode()) return;
   const deck = DEV_FILMS.slice();
   shuffleInPlace(deck);
   const guestNames = ["Dev guest 1", "Dev guest 2", "Dev guest 3"];
@@ -394,7 +593,7 @@ function seedDevRandomPicks() {
 }
 
 function devAdvanceFallback() {
-  if (!devModeOn()) return;
+  if (!devModeOn() || isCloudMode()) return;
   const topLen = Math.min(3, state.pool.length);
   if (topLen < 1) return;
   if (!state.devNoShowSlots.includes(state.devPresenterIndex)) {
@@ -417,11 +616,43 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
+function mapSubmissionRow(row) {
+  return {
+    uid: row.id,
+    id: row.tmdb_id,
+    title: row.title,
+    year: row.year || "",
+    poster: row.poster_path,
+    addedBy: row.display_name,
+  };
+}
+
 function renderAdminPool() {
   const list = $("admin-pool-list");
   if (!list) return;
   $("admin-pool-count").textContent = state.pool.length;
-  $("admin-draw-btn").disabled = state.pool.length < 2;
+
+  let drawDisabled = state.pool.length < 2;
+  const hint = $("host-draw-hint");
+  if (isCloudMode() && state.roomPublic) {
+    const st = submissionsWindowStatus(
+      new Date(),
+      state.roomPublic.submissions_open_at,
+      state.roomPublic.submissions_close_at
+    );
+    if (st !== "closed") drawDisabled = true;
+    if (hint) {
+      hint.hidden = false;
+      if (st !== "closed") {
+        hint.textContent = "Draw unlocks after the submission close time.";
+      } else {
+        hint.textContent = "Window closed — you can draw from the pool.";
+      }
+    }
+  } else if (hint) hint.hidden = true;
+
+  $("admin-draw-btn").disabled = drawDisabled;
+
   if (!state.pool.length) {
     list.innerHTML = '<p class="pool-empty-msg">no films yet</p>';
     return;
@@ -433,33 +664,37 @@ function renderAdminPool() {
     row.className = "pool-row";
     row.innerHTML = `${p ? `<img class="pool-row-poster" src="${p}" alt="">` : '<div class="pool-row-poster"></div>'}
       <div style="flex:1;min-width:0;"><div class="pool-row-title">${escapeHtml(f.title)} ${f.year ? "(" + escapeHtml(f.year) + ")" : ""}</div><div class="pool-row-by">by ${escapeHtml(f.addedBy)}</div></div>
-      <button type="button" class="del-btn" data-i="${i}">remove</button>`;
+      ${isCloudMode() ? "" : `<button type="button" class="del-btn" data-i="${i}">remove</button>`}`;
     list.appendChild(row);
   });
-  list.querySelectorAll(".del-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const i = parseInt(btn.dataset.i, 10);
-      const removed = state.pool[i];
-      state.pool.splice(i, 1);
-      if (
-        state.winner &&
-        removed &&
-        (state.winner.uid ? state.winner.uid === removed.uid : state.winner.id === removed.id)
-      ) {
-        state.winner = null;
-      }
-      save();
-      renderAdminPool();
-      renderWinner();
+  if (!isCloudMode()) {
+    list.querySelectorAll(".del-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = parseInt(btn.dataset.i, 10);
+        const removed = state.pool[i];
+        state.pool.splice(i, 1);
+        if (
+          state.winner &&
+          removed &&
+          (state.winner.uid ? state.winner.uid === removed.uid : state.winner.id === removed.id)
+        ) {
+          state.winner = null;
+        }
+        save();
+        renderAdminPool();
+        renderWinner();
+      });
     });
-  });
+  }
 }
 
 function renderWinner() {
   const el = $("winner-display");
+  const slip = $("slip-row");
   if (!el) return;
   if (!state.winner) {
     el.innerHTML = "";
+    if (slip) slip.hidden = true;
     return;
   }
   const f = state.winner;
@@ -467,6 +702,7 @@ function renderWinner() {
   el.innerHTML = `<div class="winner-row">${p ? `<img class="pool-row-poster" src="${p}" alt="">` : ""}
     <div style="flex:1;min-width:0;"><div class="winner-label">drawn film</div><div class="winner-title">${escapeHtml(f.title)}</div><div class="winner-year">${escapeHtml(f.year)}</div></div>
   </div>`;
+  if (slip) slip.hidden = !isCloudMode();
 }
 
 function ytIdFromUrl(url) {
@@ -501,10 +737,29 @@ function shareJoinUrl(code) {
   }
 }
 
+function toIsoFromDatetimeLocal(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 function populateHostForm() {
   $("room-name-input").value = state.roomName || "";
   $("event-dt").value = state.eventDt || "";
   $("yt-url-input").value = state.ytUrl || "";
+  if (isCloudMode()) {
+    const so = $("submissions-open-dt");
+    const sc = $("submissions-close-dt");
+    if (state.roomPublic && so && sc) {
+      so.value = state.roomPublic.submissions_open_at
+        ? isoToDatetimeLocalValue(state.roomPublic.submissions_open_at)
+        : "";
+      sc.value = state.roomPublic.submissions_close_at
+        ? isoToDatetimeLocalValue(state.roomPublic.submissions_close_at)
+        : "";
+    }
+  }
 }
 
 function renderHostJoinPanel() {
@@ -521,15 +776,109 @@ function renderHostJoinPanel() {
     display.textContent = "";
     if (shareInput) shareInput.value = "";
   }
+  refreshInviteRedirect();
 }
 
-function enterSite() {
+/** Invite emails use this as Supabase redirectTo (must be allowlisted in the project). */
+function refreshInviteRedirect() {
+  const el = $("invite-redirect-to");
+  if (!el || !isCloudMode()) return;
+  const code = normalizeJoinCode(state.joinCode || getLastHostCode() || "");
+  if (code.length >= 6) {
+    el.value = shareJoinUrl(code);
+  } else {
+    try {
+      const u = new URL(window.location.href);
+      el.value = u.origin + u.pathname;
+    } catch {
+      el.value = "";
+    }
+  }
+}
+
+async function fetchRoomPublic(code) {
+  const { data, error } = await sb.rpc("get_room_public", { p_join_code: code });
+  if (error) throw error;
+  return rpcFirstRow(data);
+}
+
+async function refreshMySubmission() {
+  if (!isCloudMode() || !state.roomId) return;
+  const { data, error } = await sb.rpc("get_my_submission", { p_room_id: state.roomId });
+  if (error) {
+    console.error(error);
+    state.myPick = null;
+    return;
+  }
+  const rows = data || [];
+  state.myPick = rows[0] ? mapSubmissionRow(rows[0]) : null;
+  syncPickMetaFromServerRow();
+}
+
+async function loadHostPoolFromServer() {
+  if (!isCloudMode() || !state.roomId) return;
+  const secret = getHostSecretForCode(state.joinCode);
+  if (!secret) {
+    state.pool = [];
+    return;
+  }
+  const { data, error } = await sb.rpc("host_list_submissions", {
+    p_room_id: state.roomId,
+    p_host_secret: secret,
+  });
+  if (error) {
+    console.error(error);
+    toast(error.message || "host pool failed");
+    state.pool = [];
+    return;
+  }
+  state.pool = (data || []).map(mapSubmissionRow);
+}
+
+async function enterSite() {
   const code = normalizeJoinCode($("code-input").value);
   if (code.length < 6) {
     $("err-msg").textContent = "enter the 6-character join code";
     $("code-input").focus();
     return;
   }
+
+  if (isCloudMode()) {
+    const { data: sess } = await sb.auth.getSession();
+    if (!sess?.session) {
+      $("err-msg").textContent = "sign in with your invited email first";
+      return;
+    }
+    try {
+      const row = await fetchRoomPublic(code);
+      if (!row) {
+        $("err-msg").textContent = "no room with that code";
+        $("code-input").value = "";
+        $("code-input").focus();
+        return;
+      }
+      $("err-msg").textContent = "";
+      state.joinCode = normalizeJoinCode(row.join_code);
+      currentRoomSlug = state.joinCode;
+      state.roomId = row.id;
+      state.roomPublic = row;
+      state.roomName = row.room_name || "";
+      state.eventDt = row.event_dt ? isoToDatetimeLocalValue(row.event_dt) : "";
+      state.ytUrl = row.yt_url || "";
+      state.pool = [];
+      state.winner = null;
+      await refreshMySubmission();
+      showScreen("main-screen");
+      renderCountdown();
+      renderMainStats();
+      openVideoModal();
+      return;
+    } catch (e) {
+      $("err-msg").textContent = e.message || "could not load room";
+      return;
+    }
+  }
+
   let raw = null;
   try {
     raw = localStorage.getItem(roomStorageKey(code));
@@ -552,24 +901,53 @@ function enterSite() {
   openVideoModal();
 }
 
-function openHostAdmin() {
-  const last = getLastHostCode();
-  const lastNorm = last ? normalizeJoinCode(last) : "";
-  if (
-    lastNorm &&
-    (() => {
+async function openHostAdmin() {
+  if (isCloudMode()) {
+    const last = getLastHostCode();
+    const lastNorm = last ? normalizeJoinCode(last) : "";
+    if (lastNorm) {
       try {
-        return !!localStorage.getItem(roomStorageKey(lastNorm));
+        const row = await fetchRoomPublic(lastNorm);
+        if (row) {
+          state.joinCode = lastNorm;
+          currentRoomSlug = lastNorm;
+          state.roomId = row.id;
+          state.roomPublic = row;
+          state.roomName = row.room_name || "";
+          state.eventDt = row.event_dt ? isoToDatetimeLocalValue(row.event_dt) : "";
+          state.ytUrl = row.yt_url || "";
+          await loadHostPoolFromServer();
+        } else {
+          state = freshState();
+          currentRoomSlug = null;
+        }
       } catch {
-        return false;
+        state = freshState();
+        currentRoomSlug = null;
       }
-    })()
-  ) {
-    currentRoomSlug = lastNorm;
-    loadRoomIntoState(currentRoomSlug);
+    } else {
+      state = freshState();
+      currentRoomSlug = null;
+    }
   } else {
-    currentRoomSlug = null;
-    state = freshState();
+    const last = getLastHostCode();
+    const lastNorm = last ? normalizeJoinCode(last) : "";
+    if (
+      lastNorm &&
+      (() => {
+        try {
+          return !!localStorage.getItem(roomStorageKey(lastNorm));
+        } catch {
+          return false;
+        }
+      })()
+    ) {
+      currentRoomSlug = lastNorm;
+      loadRoomIntoState(currentRoomSlug);
+    } else {
+      currentRoomSlug = null;
+      state = freshState();
+    }
   }
   populateHostForm();
   renderHostJoinPanel();
@@ -672,27 +1050,40 @@ function saveForLater(f) {
   toast("saved for next week (this device only)");
 }
 
-function beginChangePick() {
+async function beginChangePick() {
   if (!state.myPick || state.pickFinal || state.awaitingRepick) return;
-  const uid = state.myPick.uid;
-  const idx = state.pool.findIndex((p) => p.uid === uid);
-  if (idx >= 0) state.pool.splice(idx, 1);
-  if (
-    state.winner &&
-    state.winner.uid &&
-    state.winner.uid === uid
-  ) {
-    state.winner = null;
+  if (isCloudMode()) {
+    if (!state.roomId) return;
+    const { error } = await sb.rpc("delete_my_submission", { p_room_id: state.roomId });
+    if (error) {
+      toast(error.message || "could not clear pick");
+      return;
+    }
+    state.myPick = null;
+    state.awaitingRepick = true;
+    state.pickFinal = false;
+    setPickMeta(state.roomId, { pickFinal: false, awaitingRepick: true });
+  } else {
+    const uid = state.myPick.uid;
+    const idx = state.pool.findIndex((p) => p.uid === uid);
+    if (idx >= 0) state.pool.splice(idx, 1);
+    if (
+      state.winner &&
+      state.winner.uid &&
+      state.winner.uid === uid
+    ) {
+      state.winner = null;
+    }
+    state.myPick = null;
+    state.awaitingRepick = true;
+    save();
   }
-  state.myPick = null;
-  state.awaitingRepick = true;
-  save();
   $("results-list").innerHTML = "";
   renderMainStats();
   toast("pick a replacement");
 }
 
-function addFilm(f) {
+async function addFilm(f) {
   if (state.pickFinal && state.myPick) {
     toast("pick is final for this week");
     return;
@@ -701,6 +1092,8 @@ function addFilm(f) {
     toast("use change my pick first");
     return;
   }
+
+  const name = $("name-input").value.trim() || "anon";
   const firstCommit = !state.awaitingRepick && !state.myPick;
   if (firstCommit) {
     if (
@@ -712,27 +1105,69 @@ function addFilm(f) {
     }
   }
 
-  const name = $("name-input").value.trim() || "anon";
-  const uid =
-    "p-" +
-    (typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2) + Date.now().toString(36));
-  const pick = {
-    uid,
-    id: f.id,
-    title: f.title,
-    year: f.release_date ? f.release_date.slice(0, 4) : "",
-    poster: f.poster_path,
-    addedBy: name,
-  };
-  state.pool.push(pick);
-  state.myPick = pick;
-  if (state.awaitingRepick) {
-    state.awaitingRepick = false;
-    state.pickFinal = true;
+  if (isCloudMode()) {
+    if (!state.roomId) {
+      toast("join a room first");
+      return;
+    }
+    const st = submissionsWindowStatus(
+      new Date(),
+      state.roomPublic.submissions_open_at,
+      state.roomPublic.submissions_close_at
+    );
+    if (st !== "open") {
+      toast("submissions are not open for this room");
+      return;
+    }
+    const year = f.release_date ? f.release_date.slice(0, 4) : "";
+    const { error } = await sb.rpc("upsert_my_submission", {
+      p_room_id: state.roomId,
+      p_display_name: name.slice(0, 80),
+      p_tmdb_id: f.id,
+      p_title: f.title,
+      p_year: year,
+      p_poster_path: f.poster_path || null,
+    });
+    if (error) {
+      toast(error.message || "submit failed");
+      return;
+    }
+    await refreshMySubmission();
+    if (state.awaitingRepick) {
+      state.awaitingRepick = false;
+      state.pickFinal = true;
+      setPickMeta(state.roomId, { pickFinal: true, awaitingRepick: false });
+    } else {
+      state.pickFinal = false;
+      setPickMeta(state.roomId, { pickFinal: false, awaitingRepick: false });
+    }
+  } else {
+    if (state.pickFinal && state.myPick) {
+      toast("pick is final for this week");
+      return;
+    }
+    const uid =
+      "p-" +
+      (typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2) + Date.now().toString(36));
+    const pick = {
+      uid,
+      id: f.id,
+      title: f.title,
+      year: f.release_date ? f.release_date.slice(0, 4) : "",
+      poster: f.poster_path,
+      addedBy: name,
+    };
+    state.pool.push(pick);
+    state.myPick = pick;
+    if (state.awaitingRepick) {
+      state.awaitingRepick = false;
+      state.pickFinal = true;
+    }
+    save();
   }
-  save();
+
   $("results-list").innerHTML = "";
   $("film-search").value = "";
   renderMainStats();
@@ -748,13 +1183,142 @@ function applyCodeFromQuery() {
   }
 }
 
+async function createRoomOnServer() {
+  const roomName = $("room-name-input").value.trim();
+  if (!roomName) {
+    toast("add a room name");
+    $("room-name-input").focus();
+    return;
+  }
+  const dt = $("event-dt").value;
+  if (!dt) {
+    toast("pick screening date and time");
+    $("event-dt").focus();
+    return;
+  }
+  const openV = $("submissions-open-dt")?.value;
+  const closeV = $("submissions-close-dt")?.value;
+  const openIso = toIsoFromDatetimeLocal(openV);
+  const closeIso = toIsoFromDatetimeLocal(closeV);
+  if (!openIso || !closeIso) {
+    toast("set submissions open and close");
+    return;
+  }
+  const pin = ($("host-pin-input")?.value || "").trim();
+  if (!pin) {
+    toast("enter the host PIN (Netlify CLUB_HOST_PIN)");
+    return;
+  }
+
+  let res;
+  try {
+    res = await fetch("/.netlify/functions/create-room", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pin,
+        room_name: roomName,
+        event_dt: toIsoFromDatetimeLocal(dt),
+        yt_url: $("yt-url-input").value.trim(),
+        submissions_open_at: openIso,
+        submissions_close_at: closeIso,
+      }),
+    });
+  } catch (e) {
+    toast("network error — is the site on Netlify?");
+    return;
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    toast(body.error || "create room failed");
+    return;
+  }
+  state.joinCode = normalizeJoinCode(body.join_code);
+  currentRoomSlug = state.joinCode;
+  state.roomId = body.id;
+  setHostSecretForCode(state.joinCode, body.host_secret);
+  setLastHostCode(state.joinCode);
+  try {
+    const row = await fetchRoomPublic(state.joinCode);
+    state.roomPublic = row;
+    state.roomName = row.room_name || "";
+    state.eventDt = row.event_dt ? isoToDatetimeLocalValue(row.event_dt) : "";
+    state.ytUrl = row.yt_url || "";
+  } catch {
+    /* ignore */
+  }
+  populateHostForm();
+  renderHostJoinPanel();
+  await loadHostPoolFromServer();
+  renderAdminPool();
+  renderWinner();
+  toast("screening created — save the host key on this device");
+}
+
+async function sendInvitesFromHost() {
+  if (!isCloudMode()) return;
+  const raw = ($("invite-emails")?.value || "").trim();
+  if (!raw) {
+    toast("add at least one email");
+    return;
+  }
+  const pin = ($("host-pin-input")?.value || "").trim();
+  if (!pin) {
+    toast("enter the host PIN (same as create screening)");
+    return;
+  }
+  const redirectTo = ($("invite-redirect-to")?.value || "").trim();
+  if (!redirectTo) {
+    toast("missing redirect URL — open host panel with a join code set");
+    return;
+  }
+  const joinCode = normalizeJoinCode(state.joinCode || getLastHostCode() || "");
+  const roomName = (state.roomName || "").trim();
+
+  let res;
+  try {
+    res = await fetch("/.netlify/functions/invite-members", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pin,
+        emails: raw,
+        redirect_to: redirectTo,
+        ...(joinCode.length >= 6 ? { join_code: joinCode } : {}),
+        ...(roomName ? { room_name: roomName } : {}),
+      }),
+    });
+  } catch {
+    toast("network error — is the site on Netlify?");
+    return;
+  }
+  const body = await res.json().catch(() => ({}));
+  const pre = $("invite-results");
+  if (pre) {
+    pre.hidden = false;
+    if (body.results && Array.isArray(body.results)) {
+      const lines = body.results.map((r) =>
+        r.ok ? `✓ ${r.email}` : `✗ ${r.email}: ${r.error}`
+      );
+      pre.textContent = `Invited: ${body.invited ?? 0}, failed: ${body.failed ?? 0}\n${lines.join("\n")}`;
+    } else {
+      pre.textContent = body.error ? String(body.error) : JSON.stringify(body, null, 2);
+    }
+  }
+  if (!res.ok) {
+    toast(body.error || "invite request failed");
+    return;
+  }
+  toast(`Sent ${body.invited ?? 0} invite(s)`);
+}
+
 function bindEvents() {
   $("skip-btn").addEventListener("click", () => {
     $("video-modal").classList.remove("open");
     $("yt-frame").src = "";
   });
 
-  $("enter-btn").addEventListener("click", enterSite);
+  $("enter-btn").addEventListener("click", () => enterSite());
   $("code-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") enterSite();
   });
@@ -805,6 +1369,52 @@ function bindEvents() {
     }
   });
 
+  const createBtn = $("create-room-btn");
+  if (createBtn) createBtn.addEventListener("click", () => createRoomOnServer());
+
+  const saveHostSecret = $("save-host-secret-btn");
+  if (saveHostSecret) {
+    saveHostSecret.addEventListener("click", async () => {
+      const code = normalizeJoinCode(state.joinCode || getLastHostCode() || "");
+      const secret = ($("attach-host-secret")?.value || "").trim();
+      if (code.length < 6) {
+        toast("create or load a room first (join code)");
+        return;
+      }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(secret)) {
+        toast("paste a valid host key (UUID)");
+        return;
+      }
+      state.joinCode = code;
+      setHostSecretForCode(code, secret);
+      setLastHostCode(code);
+      try {
+        const row = await fetchRoomPublic(code);
+        if (!row) {
+          toast("invalid join code");
+          return;
+        }
+        state.roomId = row.id;
+        state.roomPublic = row;
+        state.roomName = row.room_name || "";
+        state.eventDt = row.event_dt ? isoToDatetimeLocalValue(row.event_dt) : "";
+        state.ytUrl = row.yt_url || "";
+        await loadHostPoolFromServer();
+        renderAdminPool();
+        renderWinner();
+        refreshInviteRedirect();
+        toast("host key saved on this device");
+      } catch (e) {
+        toast(e.message || "failed");
+      }
+    });
+  }
+
+  const sendInvitesBtn = $("send-invites-btn");
+  if (sendInvitesBtn) {
+    sendInvitesBtn.addEventListener("click", () => sendInvitesFromHost());
+  }
+
   const startNew = $("start-new-room");
   if (startNew) {
     startNew.addEventListener("click", () => {
@@ -814,7 +1424,7 @@ function bindEvents() {
       renderHostJoinPanel();
       renderAdminPool();
       renderWinner();
-      toast("new screening — name, date, then save");
+      toast(isCloudMode() ? "new screening — fill the form and create" : "new screening — name, date, then save");
     });
   }
 
@@ -829,8 +1439,55 @@ function bindEvents() {
     if (e.key === "Enter") doSearch();
   });
 
-  $("admin-draw-btn").addEventListener("click", () => {
+  $("admin-draw-btn").addEventListener("click", async () => {
     if (state.pool.length < 2) return;
+    if (isCloudMode()) {
+      const secret = getHostSecretForCode(state.joinCode);
+      if (!secret) {
+        toast("save the host key first");
+        return;
+      }
+      const btn = $("admin-draw-btn");
+      btn.disabled = true;
+      let flashes = 0;
+      const total = 16 + Math.floor(Math.random() * 8);
+      await new Promise((resolve) => {
+        const iv = setInterval(() => {
+          const pick = state.pool[Math.floor(Math.random() * state.pool.length)];
+          state.winner = pick;
+          renderWinner();
+          flashes++;
+          if (flashes >= total) {
+            clearInterval(iv);
+            resolve();
+          }
+        }, 80);
+      });
+      try {
+        const { data, error } = await sb.rpc("host_draw_winner", {
+          p_room_id: state.roomId,
+          p_host_secret: secret,
+        });
+        if (error) {
+          toast(error.message || "draw failed");
+          state.winner = null;
+          renderWinner();
+        } else {
+          const row = rpcFirstRow(data);
+          if (row) {
+            state.winner = mapSubmissionRow(row);
+            await loadHostPoolFromServer();
+            renderAdminPool();
+            renderWinner();
+            toast(`drawn: ${state.winner.title}`);
+          }
+        }
+      } catch (e) {
+        toast(e.message || "draw failed");
+      }
+      btn.disabled = false;
+      return;
+    }
     let flashes = 0;
     const total = 16 + Math.floor(Math.random() * 8);
     const btn = $("admin-draw-btn");
@@ -848,26 +1505,103 @@ function bindEvents() {
     }, 80);
   });
 
-  $("admin-clear-btn").addEventListener("click", () => {
-    state.pool = [];
-    state.winner = null;
-    state.myPick = null;
-    state.awaitingRepick = false;
-    state.pickFinal = false;
-    state.devPresenterIndex = 0;
-    state.devNoShowSlots = [];
-    save();
-    renderAdminPool();
-    renderWinner();
-    toast("pool cleared");
-  });
+  const clearBtn = $("admin-clear-btn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      state.pool = [];
+      state.winner = null;
+      state.myPick = null;
+      state.awaitingRepick = false;
+      state.pickFinal = false;
+      state.devPresenterIndex = 0;
+      state.devNoShowSlots = [];
+      save();
+      renderAdminPool();
+      renderWinner();
+      toast("pool cleared");
+    });
+  }
 
   const devSeed = $("dev-seed-btn");
   if (devSeed) devSeed.addEventListener("click", seedDevRandomPicks);
   const devNext = $("dev-next-fallback-btn");
   if (devNext) devNext.addEventListener("click", devAdvanceFallback);
+
+  const slip = $("copy-slip-btn");
+  if (slip) {
+    slip.addEventListener("click", () => {
+      if (!state.winner?.title) return;
+      copyText(state.winner.title);
+    });
+  }
+  const rev = $("copy-reveal-btn");
+  if (rev) {
+    rev.addEventListener("click", () => {
+      if (!state.winner?.title) return;
+      copyText(
+        `Tonight’s film is “${state.winner.title}”${state.winner.year ? ` (${state.winner.year})` : ""}.`
+      );
+    });
+  }
+
+  const magic = $("send-magic-btn");
+  if (magic) {
+    magic.addEventListener("click", async () => {
+      const email = ($("auth-email")?.value || "").trim();
+      const st = $("auth-status");
+      if (!email) {
+        if (st) {
+          st.hidden = false;
+          st.textContent = "Enter your email.";
+        }
+        return;
+      }
+      const { error } = await sb.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.origin + window.location.pathname },
+      });
+      if (st) st.hidden = false;
+      if (error) {
+        if (st) st.textContent = error.message;
+        return;
+      }
+      if (st) st.textContent = "Check your email for the sign-in link.";
+    });
+  }
+
+  const so = $("entry-sign-out-btn");
+  if (so) so.addEventListener("click", () => signOutClicked());
+  const mo = $("main-sign-out-btn");
+  if (mo) mo.addEventListener("click", () => signOutClicked());
 }
 
+async function signOutClicked() {
+  if (sb) await sb.auth.signOut();
+  updateAuthChrome();
+  toast("signed out");
+}
+
+function updateAuthChrome() {
+  const out = $("entry-sign-out-btn");
+  const email = $("auth-email");
+  const st = $("auth-status");
+  if (!sb) return;
+  sb.auth.getSession().then(({ data }) => {
+    const s = data.session;
+    if (out) out.hidden = !s;
+    if (email && s?.user?.email) email.value = s.user.email;
+    if (st && s) {
+      st.hidden = false;
+      st.textContent = `Signed in as ${s.user.email}`;
+    }
+  });
+}
+
+applyBuildMode();
 bindEvents();
 applyCodeFromQuery();
 renderCountdown();
+if (sb) {
+  sb.auth.onAuthStateChange(() => updateAuthChrome());
+  updateAuthChrome();
+}
