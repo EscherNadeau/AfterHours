@@ -1085,6 +1085,26 @@ body {
   line-height: 1.45;
 }
 
+.auth-hint-muted {
+  color: #444;
+}
+
+.auth-or {
+  font-size: 10px;
+  color: #3a3a45;
+  text-align: center;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0.25rem 0;
+}
+
+.auth-label-note {
+  font-weight: 400;
+  color: #555;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .auth-status {
   font-size: 12px;
   color: #888;

@@ -36,12 +36,26 @@
       </div>
       <div id="auth-block" class="auth-block" hidden>
         <p class="sec-label">member sign-in</p>
-        <p class="auth-hint">Invited members: enter the email from your invite, then use the link from your inbox.</p>
+        <p class="auth-hint">
+          Enter your <strong>join code</strong> for this screening below. Use the <strong>same email</strong> the host invited.
+          You must be signed in before <strong>enter</strong> will open the room—the code alone is not enough.
+        </p>
+        <p class="auth-hint auth-hint-muted">
+          <strong>Send sign-in link</strong> emails you a magic link. Supabase’s built-in mail is <strong>rate-limited</strong>
+          — if you see “rate limit exceeded,” wait, ask the host to set up SMTP, or use <strong>sign in with password</strong>
+          (set a password for your user in Supabase <strong>Authentication → Users</strong> if you don’t have one yet).
+        </p>
         <div class="admin-row">
           <label for="auth-email">email</label>
           <input type="email" id="auth-email" autocomplete="email" placeholder="you@example.com" />
         </div>
         <button type="button" class="btn-secondary" id="send-magic-btn">send sign-in link</button>
+        <p class="auth-or" aria-hidden="true">or</p>
+        <div class="admin-row">
+          <label for="auth-password">password <span class="auth-label-note">(if set in Supabase)</span></label>
+          <input type="password" id="auth-password" autocomplete="current-password" placeholder="set under Users → your email" />
+        </div>
+        <button type="button" class="btn-secondary" id="sign-in-password-btn">sign in with password</button>
         <p class="auth-status" id="auth-status" hidden></p>
         <button type="button" class="link-btn auth-out" id="entry-sign-out-btn" hidden>sign out</button>
       </div>

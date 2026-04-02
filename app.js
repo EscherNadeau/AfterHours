@@ -1629,10 +1629,50 @@ function bindEvents() {
       });
       if (st) st.hidden = false;
       if (error) {
-        if (st) st.textContent = error.message;
+        let msg = error.message;
+        if (/rate limit|too many|email.*limit/i.test(msg)) {
+          msg +=
+            " Use sign in with password (set a password on your user in Supabase → Authentication → Users) or wait and retry.";
+        }
+        if (st) st.textContent = msg;
         return;
       }
       if (st) st.textContent = "Check your email for the sign-in link.";
+    });
+  }
+
+  const pwdBtn = $("sign-in-password-btn");
+  if (pwdBtn) {
+    pwdBtn.addEventListener("click", async () => {
+      const email = ($("auth-email")?.value || "").trim();
+      const password = ($("auth-password")?.value || "");
+      const st = $("auth-status");
+      if (!email) {
+        if (st) {
+          st.hidden = false;
+          st.textContent = "Enter your email.";
+        }
+        return;
+      }
+      if (!password) {
+        if (st) {
+          st.hidden = false;
+          st.textContent = "Enter a password, or use send sign-in link.";
+        }
+        return;
+      }
+      const codeForLink = normalizeJoinCode(
+        $("code-input")?.value || new URLSearchParams(location.search).get("code") || ""
+      );
+      if (codeForLink.length >= 6) persistPendingJoinCode(codeForLink);
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (st) st.hidden = false;
+      if (error) {
+        if (st) st.textContent = error.message;
+        return;
+      }
+      if (st) st.textContent = "Signed in — tap Enter or the room may open automatically.";
+      void maybeAutoEnterRoomAfterAuth();
     });
   }
 
