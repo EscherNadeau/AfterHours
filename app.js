@@ -342,12 +342,22 @@ function submissionsWindowStatus(now, openAt, closeAt) {
   return "open";
 }
 
+/** Screening instant from server (keep in sync with open/lock ISO strings — avoids datetime-local parse skew). */
+function roomScreeningInstantMs(rp) {
+  if (!rp?.event_dt) return NaN;
+  const t = new Date(rp.event_dt).getTime();
+  return Number.isNaN(t) ? NaN : t;
+}
+
 function hasPickNightTimeline(rp) {
-  if (!rp || !state.eventDt) return false;
+  if (!rp?.event_dt) return false;
   const o = new Date(rp.submissions_open_at).getTime();
   const c = new Date(rp.submissions_close_at).getTime();
-  const e = new Date(state.eventDt).getTime();
-  return !Number.isNaN(o) && !Number.isNaN(c) && !Number.isNaN(e) && e > o;
+  const e = roomScreeningInstantMs(rp);
+  if (Number.isNaN(o) || Number.isNaN(c) || Number.isNaN(e)) return false;
+  // Expect: picks open → lock → screening. Otherwise the bar lies (e.g. "lock" after screening).
+  if (!(o < c && c <= e)) return false;
+  return true;
 }
 
 function countdownDigitsHtml(diffMs) {
@@ -380,10 +390,12 @@ function renderCountdown() {
 
   const rp = state.roomPublic;
   const useTimeline = isCloudMode() && hasPickNightTimeline(rp);
+  const legacyScreeningIso =
+    isCloudMode() && rp?.event_dt ? rp.event_dt : state.eventDt || null;
 
   if (timeline) timeline.hidden = !useTimeline;
 
-  if (!useTimeline && !state.eventDt) {
+  if (!useTimeline && !legacyScreeningIso) {
     if (heroLabel) heroLabel.textContent = "next screening";
     el.innerHTML = '<p class="cd-no-date">date tbd — check back soon</p>';
     return;
@@ -402,7 +414,7 @@ function renderCountdown() {
     if (useTimeline) {
       const openMs = new Date(rp.submissions_open_at).getTime();
       const lockMs = new Date(rp.submissions_close_at).getTime();
-      const eventMs = new Date(state.eventDt).getTime();
+      const eventMs = roomScreeningInstantMs(rp);
       const denom = eventMs - openMs;
       const lockPct =
         denom > 0
@@ -437,7 +449,7 @@ function renderCountdown() {
 
       const oLabel = new Date(openMs).toLocaleString(undefined, stopFmt);
       const lLabel = new Date(lockMs).toLocaleString(undefined, stopFmt);
-      const eLabel = new Date(eventMs).toLocaleString(undefined, stopFmt);
+      const eLabel = new Date(rp.event_dt).toLocaleString(undefined, stopFmt);
       const fillW = Math.min(100, markerPct * 100);
 
       if (timeline) {
@@ -468,7 +480,7 @@ function renderCountdown() {
     } else {
       if (timeline) timeline.innerHTML = "";
       if (heroLabel) heroLabel.textContent = "next screening";
-      const diff = new Date(state.eventDt).getTime() - now;
+      const diff = new Date(legacyScreeningIso).getTime() - now;
       el.innerHTML = countdownDigitsHtml(diff);
     }
   }
