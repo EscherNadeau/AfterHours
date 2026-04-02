@@ -14,6 +14,7 @@ const JOIN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const BACKLOG_MAX = 5;
 const PICK_META_PREFIX = "ah_pickmeta_";
 const HOST_SECRET_PREFIX = "ah_host_";
+const PENDING_JOIN_KEY = "ah_pending_join_code";
 
 const sb =
   String(SUPABASE_URL || "").trim() && String(SUPABASE_ANON_KEY || "").trim()
@@ -872,6 +873,7 @@ async function enterSite() {
       renderCountdown();
       renderMainStats();
       openVideoModal();
+      clearPendingJoinCode();
       return;
     } catch (e) {
       $("err-msg").textContent = e.message || "could not load room";
@@ -1174,13 +1176,74 @@ async function addFilm(f) {
   toast(`"${f.title}" added`);
 }
 
-function applyCodeFromQuery() {
+/** Full URL for magic-link return — keeps ?code= so the room survives the email round-trip. */
+function buildMagicLinkRedirectUrl() {
+  let u;
   try {
-    const c = new URLSearchParams(location.search).get("code");
-    if (c) $("code-input").value = c.trim().toUpperCase();
+    u = new URL(window.location.href);
+  } catch {
+    return `${window.location.origin}/`;
+  }
+  const fromQuery = normalizeJoinCode(new URLSearchParams(u.search).get("code") || "");
+  const fromInput = normalizeJoinCode($("code-input")?.value || "");
+  const code = fromQuery.length >= 6 ? fromQuery : fromInput;
+  if (code.length >= 6) u.searchParams.set("code", code);
+  else u.searchParams.delete("code");
+  if (devModeOn()) u.searchParams.set("dev", "1");
+  else u.searchParams.delete("dev");
+  return u.origin + u.pathname + u.search;
+}
+
+function persistPendingJoinCode(code) {
+  const c = normalizeJoinCode(code || "");
+  if (c.length < 6) return;
+  try {
+    localStorage.setItem(PENDING_JOIN_KEY, c);
   } catch {
     /* ignore */
   }
+}
+
+function clearPendingJoinCode() {
+  try {
+    localStorage.removeItem(PENDING_JOIN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function applyCodeFromQuery() {
+  try {
+    const c = new URLSearchParams(location.search).get("code");
+    if (c) {
+      const norm = normalizeJoinCode(c);
+      $("code-input").value = norm;
+      persistPendingJoinCode(norm);
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const pending = localStorage.getItem(PENDING_JOIN_KEY);
+    if (pending && !$("code-input")?.value) {
+      $("code-input").value = normalizeJoinCode(pending);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+async function maybeAutoEnterRoomAfterAuth() {
+  if (!isCloudMode() || !sb) return;
+  if (!$("entry-screen")?.classList.contains("active")) return;
+  applyCodeFromQuery();
+  const code = normalizeJoinCode($("code-input")?.value || "");
+  if (code.length < 6) return;
+  const { data: sess } = await sb.auth.getSession();
+  if (!sess?.session) return;
+  $("err-msg").textContent = "";
+  await enterSite();
 }
 
 async function createRoomOnServer() {
@@ -1556,9 +1619,13 @@ function bindEvents() {
         }
         return;
       }
+      const codeForLink = normalizeJoinCode(
+        $("code-input")?.value || new URLSearchParams(location.search).get("code") || ""
+      );
+      if (codeForLink.length >= 6) persistPendingJoinCode(codeForLink);
       const { error } = await sb.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: window.location.origin + window.location.pathname },
+        options: { emailRedirectTo: buildMagicLinkRedirectUrl() },
       });
       if (st) st.hidden = false;
       if (error) {
@@ -1602,6 +1669,11 @@ bindEvents();
 applyCodeFromQuery();
 renderCountdown();
 if (sb) {
-  sb.auth.onAuthStateChange(() => updateAuthChrome());
+  sb.auth.onAuthStateChange((event, session) => {
+    updateAuthChrome();
+    if (session && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+      void maybeAutoEnterRoomAfterAuth();
+    }
+  });
   updateAuthChrome();
 }
