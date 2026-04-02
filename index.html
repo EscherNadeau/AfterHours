@@ -45,8 +45,7 @@
           Use the <strong>same email</strong> the host used for your invite. You must finish sign-in before <strong>enter</strong> opens the room — the join code alone is not enough.
         </p>
         <p class="auth-hint auth-hint-muted">
-          If <strong>send sign-in link</strong> says rate limit, wait a bit and try again—or use <strong>sign in with password</strong>
-          if the host gave you one.
+          Use <strong>send sign-in link</strong> first unless you already saved a password. After you’re signed in, you can <strong>choose your own password</strong> below — the host doesn’t send one.
         </p>
         <div class="admin-row">
           <label for="auth-email">email</label>
@@ -55,10 +54,23 @@
         <button type="button" class="btn-secondary" id="send-magic-btn">send sign-in link</button>
         <p class="auth-or" aria-hidden="true">or</p>
         <div class="admin-row">
-          <label for="auth-password">password <span class="auth-label-note">(if the host set one up)</span></label>
-          <input type="password" id="auth-password" autocomplete="current-password" placeholder="optional" />
+          <label for="auth-password">password <span class="auth-label-note">(if you already created one here)</span></label>
+          <input type="password" id="auth-password" autocomplete="current-password" placeholder="after magic link, save below" />
         </div>
         <button type="button" class="btn-secondary" id="sign-in-password-btn">sign in with password</button>
+        <div id="auth-set-password-wrap" class="auth-set-password-wrap" hidden>
+          <p class="sec-label auth-sub-sec">your password (optional)</p>
+          <p class="auth-hint-muted">Pick something only you know — use it next time with <strong>sign in with password</strong> instead of email.</p>
+          <div class="admin-row">
+            <label for="auth-new-password">new password</label>
+            <input type="password" id="auth-new-password" autocomplete="new-password" minlength="6" placeholder="min. 6 characters" />
+          </div>
+          <div class="admin-row">
+            <label for="auth-new-password-confirm">confirm</label>
+            <input type="password" id="auth-new-password-confirm" autocomplete="new-password" minlength="6" />
+          </div>
+          <button type="button" class="btn-secondary" id="save-member-password-btn">save my password</button>
+        </div>
         <p class="auth-status" id="auth-status" hidden></p>
         <button type="button" class="link-btn auth-out" id="entry-sign-out-btn" hidden>sign out</button>
       </div>
@@ -95,6 +107,22 @@
           <span class="room-badge" id="room-badge" title=""></span>
           <button type="button" class="link-btn top-sign-out" id="main-sign-out-btn" hidden>sign out</button>
         </div>
+      </div>
+      <div class="main-account-card cloud-only" id="main-account-card" hidden>
+        <p class="sec-label">account</p>
+        <p class="auth-hint-muted main-account-hint">
+          Optional: save a <strong>password you choose</strong> to skip the email link next visit — not something the host sends.
+        </p>
+        <div class="admin-row">
+          <label for="main-new-password">new password</label>
+          <input type="password" id="main-new-password" autocomplete="new-password" minlength="6" placeholder="min. 6 characters" />
+        </div>
+        <div class="admin-row">
+          <label for="main-new-password-confirm">confirm</label>
+          <input type="password" id="main-new-password-confirm" autocomplete="new-password" minlength="6" />
+        </div>
+        <button type="button" class="btn-secondary" id="main-save-member-password-btn">save my password</button>
+        <p class="auth-status" id="main-password-status" hidden></p>
       </div>
       <p class="screening-title" id="room-title-line" hidden></p>
       <div class="countdown-block">
@@ -239,7 +267,7 @@
           <ol class="host-checklist">
             <li><strong>Host key</strong> is saved on this device after you created — don&rsquo;t clear site data here, or paste the key again under &ldquo;host key on this device.&rdquo;</li>
             <li>In <strong>Supabase → Authentication → URL Configuration</strong>, add your live site URL and redirect patterns so magic links and invites return here.</li>
-            <li>Use <strong>the list (invite-only)</strong> below to email members, then tell them: sign in on this site (step 1), then enter the join code (step 2).</li>
+            <li>Use <strong>the list (invite-only)</strong> below to email members. Tell them: magic link sign-in (step 1), optional <strong>save my password</strong> so they choose their own — then join code (step 2).</li>
           </ol>
           <button type="button" class="link-btn" id="dismiss-host-checklist">got it — hide checklist</button>
         </div>

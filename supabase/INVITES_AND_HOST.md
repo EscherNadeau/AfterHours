@@ -10,7 +10,7 @@ Alternatively keep email sign-up off by using **Invite only** workflow: every me
 
 ## Member sign-in on the site
 
-- On the entry screen: **step 1** — sign in with the **same email** the host invited (**Send sign-in link** for magic link, or **sign in with password** if that user has a password in Auth).
+- On the entry screen: **step 1** — sign in with the **same email** the host invited (**Send sign-in link** for magic link first). After you’re signed in, use **save my password** (entry screen or **account** on the main screen) to choose your own password — then **sign in with password** works next time; the host does not issue passwords.
 - **Step 2** — enter the join code and tap **Enter**. The code alone does not open the room without a session.
 - Magic link / OTP: Authentication → Email — **Confirm email** / magic link settings must match how you invite users.
 - If the page shows only **offline demo** wording and **no** sign-in block, the deployed build is missing `SUPABASE_URL` and `SUPABASE_ANON_KEY` at build time — members should use the real hosted URL the host shared.

@@ -45,7 +45,10 @@ function friendlyAuthError(msg) {
     return "Confirm your email from the inbox link first, then try signing in again.";
   }
   if (/rate limit|too many requests|email rate|seconds_until/i.test(m)) {
-    return "Too many sign-in emails. Wait a few minutes, use password sign-in if your host set that up, or try again later.";
+    return "Too many sign-in emails. Wait a few minutes, sign in with password if you already saved one, or try again later.";
+  }
+  if (/password.*at least|password.*short|weak password|password.*characters/i.test(m)) {
+    return "Password must meet your project’s rules (usually at least 6 characters). Try a longer one.";
   }
   return raw;
 }
@@ -737,6 +740,7 @@ function renderMainStats() {
     renderPickStatusAndActions();
   }
   updateBlindPoolIntro();
+  updateMainAccountCard();
 }
 
 function updateBlindPoolIntro() {
@@ -1950,15 +1954,121 @@ function bindEvents() {
     });
   }
 
+  const savePwdBtn = $("save-member-password-btn");
+  if (savePwdBtn) {
+    savePwdBtn.addEventListener("click", async () => {
+      const st = $("auth-status");
+      const ok = await saveMemberChosenPassword(
+        $("auth-new-password")?.value,
+        $("auth-new-password-confirm")?.value,
+        st
+      );
+      if (!ok) return;
+      const np = $("auth-new-password");
+      const npc = $("auth-new-password-confirm");
+      const old = $("auth-password");
+      if (np) np.value = "";
+      if (npc) npc.value = "";
+      if (old) old.value = "";
+    });
+  }
+
+  const mainSavePwd = $("main-save-member-password-btn");
+  if (mainSavePwd) {
+    mainSavePwd.addEventListener("click", async () => {
+      const st = $("main-password-status");
+      const ok = await saveMemberChosenPassword(
+        $("main-new-password")?.value,
+        $("main-new-password-confirm")?.value,
+        st
+      );
+      if (!ok) return;
+      const np = $("main-new-password");
+      const npc = $("main-new-password-confirm");
+      if (np) np.value = "";
+      if (npc) npc.value = "";
+    });
+  }
+
   const so = $("entry-sign-out-btn");
   if (so) so.addEventListener("click", () => signOutClicked());
   const mo = $("main-sign-out-btn");
   if (mo) mo.addEventListener("click", () => signOutClicked());
 }
 
+/** After magic link or password sign-in — member sets their own password via Supabase updateUser. */
+async function saveMemberChosenPassword(p1Raw, p2Raw, feedbackEl) {
+  const p1 = String(p1Raw || "").trim();
+  const p2 = String(p2Raw || "").trim();
+  if (!p1 || p1.length < 6) {
+    if (feedbackEl) {
+      feedbackEl.hidden = false;
+      feedbackEl.textContent = "Choose a password at least 6 characters.";
+    }
+    return false;
+  }
+  if (p1 !== p2) {
+    if (feedbackEl) {
+      feedbackEl.hidden = false;
+      feedbackEl.textContent = "Passwords don’t match — try again.";
+    }
+    return false;
+  }
+  const { data: sess } = await sb.auth.getSession();
+  if (!sess?.session) {
+    if (feedbackEl) {
+      feedbackEl.hidden = false;
+      feedbackEl.textContent = "Sign in with the email link first.";
+    }
+    return false;
+  }
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if (error) {
+    if (feedbackEl) {
+      feedbackEl.hidden = false;
+      feedbackEl.textContent = friendlyAuthError(error.message);
+    }
+    return false;
+  }
+  if (feedbackEl) {
+    feedbackEl.hidden = false;
+    feedbackEl.textContent =
+      "Password saved — next time use email + password on the home screen, or keep using the link.";
+  }
+  toast("password saved");
+  return true;
+}
+
+function updateMainAccountCard() {
+  const card = $("main-account-card");
+  const np = $("main-new-password");
+  const npc = $("main-new-password-confirm");
+  const st = $("main-password-status");
+  if (!card || !isCloudMode() || !sb) {
+    if (card) card.hidden = true;
+    return;
+  }
+  sb.auth.getSession().then(({ data }) => {
+    const s = data.session;
+    const onMain = $("main-screen")?.classList.contains("active");
+    if (!s || !onMain) {
+      card.hidden = true;
+      if (np) np.value = "";
+      if (npc) npc.value = "";
+      if (st) {
+        st.hidden = true;
+        st.textContent = "";
+      }
+    } else {
+      card.hidden = false;
+    }
+  });
+}
+
 async function signOutClicked() {
   if (sb) await sb.auth.signOut();
   updateAuthChrome();
+  updateMainAccountCard();
   toast("signed out");
 }
 
@@ -1966,14 +2076,27 @@ function updateAuthChrome() {
   const out = $("entry-sign-out-btn");
   const email = $("auth-email");
   const st = $("auth-status");
+  const setWrap = $("auth-set-password-wrap");
+  const np = $("auth-new-password");
+  const npc = $("auth-new-password-confirm");
   if (!sb) return;
   sb.auth.getSession().then(({ data }) => {
     const s = data.session;
     if (out) out.hidden = !s;
     if (email && s?.user?.email) email.value = s.user.email;
-    if (st && s) {
-      st.hidden = false;
-      st.textContent = `Signed in as ${s.user.email}`;
+    if (st) {
+      if (s) {
+        st.hidden = false;
+        st.textContent = `Signed in as ${s.user.email}`;
+      } else {
+        st.hidden = true;
+        st.textContent = "";
+      }
+    }
+    if (setWrap) setWrap.hidden = !s;
+    if (!s) {
+      if (np) np.value = "";
+      if (npc) npc.value = "";
     }
   });
 }
@@ -1985,6 +2108,7 @@ renderCountdown();
 if (sb) {
   sb.auth.onAuthStateChange((event, session) => {
     updateAuthChrome();
+    updateMainAccountCard();
     if (session && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
       void maybeAutoEnterRoomAfterAuth();
     }

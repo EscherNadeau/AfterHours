@@ -1287,6 +1287,42 @@ body {
   align-self: flex-start;
 }
 
+.auth-sub-sec {
+  margin-top: 0.5rem;
+  font-size: 10px;
+}
+
+.auth-set-password-wrap {
+  margin-top: 0.75rem;
+  padding-top: 0.85rem;
+  border-top: 0.5px solid #252530;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.main-account-card {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  background: #111118;
+  border: 0.5px solid #1e1e28;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.main-account-card .sec-label {
+  margin: 0;
+}
+
+.main-account-hint {
+  margin: 0 !important;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .offline-hint {
   font-size: 11px;
   color: #555;
